@@ -83,6 +83,11 @@ console.log(`[RUNTIME] Running on: ${RUNTIME} ${RUNTIME_VERSION}`);
 const modulesLoaded = typeof require.cache === 'object' ? Object.keys(require.cache).length : 'N/A';
 console.log(`[TIMING] Modules loaded: ${modulesLoaded}`);
 
+// Cluster info (set by cluster.js primary process)
+const IS_CLUSTERED = process.env.BUN_WORKER === 'true';
+const WORKER_ID = process.env.WORKER_ID ? parseInt(process.env.WORKER_ID) : null;
+const WORKERS_TOTAL = process.env.WORKERS_TOTAL ? parseInt(process.env.WORKERS_TOTAL) : null;
+
 // ============================================
 // Logger Setup
 // ============================================
@@ -142,6 +147,12 @@ app.get('/api/health', (req, res) => {
     status: 'healthy',
     runtime: RUNTIME,
     runtime_version: RUNTIME_VERSION,
+    // Cluster info
+    cluster_mode: IS_CLUSTERED,
+    worker_id: WORKER_ID,
+    workers_total: WORKERS_TOTAL,
+    process_id: process.pid,
+    // Timing info
     uptime_ms: uptime,
     uptime_formatted: moment.duration(uptime).humanize(),
     module_load_ms: MODULE_LOAD_TIME,
@@ -208,15 +219,69 @@ app.delete('/api/todos/:id', (req, res) => {
   res.json({ message: 'Todo deleted successfully' });
 });
 
+// ============================================
+// CPU-Heavy Benchmark Endpoints
+// ============================================
+
+// CPU-Heavy endpoint: Generate and sort 100,000 numbers (matches Strapi article test)
+app.get('/api/cpu-heavy', (req, res) => {
+  const startTime = Date.now();
+
+  // Generate 100,000 random numbers
+  const numbers = [];
+  for (let i = 0; i < 100000; i++) {
+    numbers.push(Math.random() * 1000000);
+  }
+
+  // Sort them
+  numbers.sort((a, b) => a - b);
+
+  const duration = Date.now() - startTime;
+
+  res.json({
+    runtime: RUNTIME,
+    runtime_version: RUNTIME_VERSION,
+    operation: 'generate_and_sort_100k_numbers',
+    duration_ms: duration,
+    array_length: numbers.length,
+    first_5: numbers.slice(0, 5),
+    last_5: numbers.slice(-5)
+  });
+});
+
+// Fibonacci endpoint (recursive, CPU intensive)
+app.get('/api/fibonacci/:n', (req, res) => {
+  const n = Math.min(parseInt(req.params.n) || 40, 45); // Cap at 45 to prevent timeout
+  const startTime = Date.now();
+
+  function fib(num) {
+    if (num <= 1) return num;
+    return fib(num - 1) + fib(num - 2);
+  }
+
+  const result = fib(n);
+  const duration = Date.now() - startTime;
+
+  res.json({
+    runtime: RUNTIME,
+    runtime_version: RUNTIME_VERSION,
+    operation: 'fibonacci',
+    n: n,
+    result: result,
+    duration_ms: duration
+  });
+});
+
 // Serve React app for all other routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ============================================
-// Start Server
+// Start Server with Keep-Alive Tuning
+// (Reduces syscall overhead in gVisor environments)
 // ============================================
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   const READY_TIME = Date.now();
   const TOTAL_STARTUP_MS = READY_TIME - PROCESS_START_TIME;
 
@@ -257,3 +322,8 @@ app.listen(PORT, () => {
 
   logger.info(`Server started in ${TOTAL_STARTUP_MS}ms`);
 });
+
+// Keep-alive tuning for gVisor/cloud environments
+// Reduces TCP connection churn and syscall overhead
+server.keepAliveTimeout = 65000; // 65 seconds (longer than ALB default of 60s)
+server.headersTimeout = 66000;   // Slightly longer than keepAliveTimeout

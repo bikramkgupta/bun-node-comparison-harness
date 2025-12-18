@@ -1,0 +1,86 @@
+services:
+  bun-app:
+    build:
+      context: ./bun
+      dockerfile: Dockerfile
+    container_name: bun-benchmark
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+      # Cluster configuration (auto = use all CPUs)
+      - WORKERS=${WORKERS:-auto}
+      # Reduce DNS lookups (cache for 60s)
+      - BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS=60
+    # Increase file descriptor limit for high concurrency
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - benchmark-net
+
+  nodejs-app:
+    build:
+      context: ./nodejs
+      dockerfile: Dockerfile
+    container_name: nodejs-benchmark
+    ports:
+      - "3002:3000"
+    environment:
+      - NODE_ENV=production
+      # Cluster configuration (auto = use all CPUs)
+      - WORKERS=${WORKERS:-auto}
+      # Node.js I/O thread pool size (high for gVisor syscall overhead)
+      - UV_THREADPOOL_SIZE=${UV_THREADPOOL_SIZE:-128}
+      # Disable io_uring sqpoll (already default, explicit for gVisor compat)
+      - UV_USE_IO_URING=0
+    # Increase file descriptor limit for high concurrency
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - benchmark-net
+
+  load-tester:
+    build:
+      context: ./load-tester
+      dockerfile: Dockerfile
+    container_name: benchmark-dashboard
+    ports:
+      - "8080:8080"
+    depends_on:
+      bun-app:
+        condition: service_healthy
+      nodejs-app:
+        condition: service_healthy
+    # Volume is optional - if not available, results are stored in /tmp/benchmark-results
+    # Comment out or remove for cloud deployments without persistent storage
+    volumes:
+      - ./results:/results
+    environment:
+      - PORT=8080
+      # RESULTS_DIR falls back to /tmp/benchmark-results if volume not writable
+      - RESULTS_DIR=/results
+      - BUN_HOST=bun-app
+      - NODEJS_HOST=nodejs-app
+    networks:
+      - benchmark-net
+    restart: unless-stopped
+
+networks:
+  benchmark-net:
+    driver: bridge

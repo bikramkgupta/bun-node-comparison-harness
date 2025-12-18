@@ -1,0 +1,124 @@
+alerts:
+- rule: DEPLOYMENT_FAILED
+- rule: DOMAIN_FAILED
+ingress:
+  rules:
+  - component:
+      name: benchmark-service
+    match:
+      path:
+        prefix: /
+name: bun-node-benchmark
+region: syd
+services:
+- envs:
+  - key: GITHUB_REPO_URL
+    scope: RUN_TIME
+    value: https://github.com/bikramkgupta/bun-node-comparison-harness
+  - key: GITHUB_BRANCH
+    scope: RUN_TIME
+    value: dev
+  - key: GITHUB_REPO_FOLDER
+    scope: RUN_TIME
+    value: bun
+  - key: DEV_START_COMMAND
+    scope: RUN_TIME
+    value: bash dev_startup.sh
+  - key: GITHUB_SYNC_INTERVAL
+    scope: RUN_TIME
+    value: "15"
+  health_check:
+    failure_threshold: 6
+    http_path: /dev_health
+    initial_delay_seconds: 30
+    period_seconds: 10
+    port: 9090
+    success_threshold: 1
+    timeout_seconds: 5
+  image:
+    registry: bikramkgupta
+    registry_type: GHCR
+    repository: hot-reload-bun
+    tag: latest
+  instance_count: 1
+  instance_size_slug: apps-d-1vcpu-1gb
+  internal_ports:
+  - 8080
+  - 9090
+  name: bun-service
+- envs:
+  - key: GITHUB_REPO_URL
+    scope: RUN_TIME
+    value: https://github.com/bikramkgupta/bun-node-comparison-harness
+  - key: GITHUB_BRANCH
+    scope: RUN_TIME
+    value: dev
+  - key: GITHUB_REPO_FOLDER
+    scope: RUN_TIME
+    value: nodejs
+  - key: DEV_START_COMMAND
+    scope: RUN_TIME
+    value: bash dev_startup.sh
+  - key: GITHUB_SYNC_INTERVAL
+    scope: RUN_TIME
+    value: "15"
+  health_check:
+    failure_threshold: 6
+    http_path: /dev_health
+    initial_delay_seconds: 30
+    period_seconds: 10
+    port: 9090
+    success_threshold: 1
+    timeout_seconds: 5
+  image:
+    registry: bikramkgupta
+    registry_type: GHCR
+    repository: hot-reload-node
+    tag: latest
+  instance_count: 1
+  instance_size_slug: apps-d-1vcpu-1gb
+  internal_ports:
+  - 8080
+  - 9090
+  name: nodejs-service
+- envs:
+  - key: GITHUB_REPO_URL
+    scope: RUN_TIME
+    value: https://github.com/bikramkgupta/bun-node-comparison-harness
+  - key: GITHUB_BRANCH
+    scope: RUN_TIME
+    value: dev
+  - key: GITHUB_REPO_FOLDER
+    scope: RUN_TIME
+    value: load-tester
+  - key: DEV_START_COMMAND
+    scope: RUN_TIME
+    value: bash dev_startup.sh
+  - key: GITHUB_SYNC_INTERVAL
+    scope: RUN_TIME
+    value: "15"
+  - key: BUN_URL
+    scope: RUN_TIME
+    value: ${bun-service.PRIVATE_URL}
+  - key: NODEJS_URL
+    scope: RUN_TIME
+    value: ${nodejs-service.PRIVATE_URL}
+  health_check:
+    failure_threshold: 6
+    http_path: /dev_health
+    initial_delay_seconds: 30
+    period_seconds: 10
+    port: 9090
+    success_threshold: 1
+    timeout_seconds: 5
+  http_port: 8080
+  image:
+    registry: bikramkgupta
+    registry_type: GHCR
+    repository: hot-reload-bun
+    tag: latest
+  instance_count: 1
+  instance_size_slug: apps-d-1vcpu-1gb
+  internal_ports:
+  - 9090
+  name: benchmark-service

@@ -39,9 +39,13 @@ RUN cp /tmp/timing.txt /app/install-timing.txt
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
+# Increase libuv thread pool for better async I/O performance
+ENV UV_THREADPOOL_SIZE=128
+# Default to auto workers (one per CPU)
+ENV WORKERS=auto
 
 # Expose port
 EXPOSE 3000
 
-# Start command
-CMD ["node", "server.js"]
+# Start command - use cluster.js for multi-core support
+CMD ["node", "cluster.js"]

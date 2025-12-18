@@ -5,3 +5,4 @@ node_modules/
 startup-timing.json
 install-timing.txt
 bun.lockb
+results/
