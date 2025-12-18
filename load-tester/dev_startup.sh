@@ -9,17 +9,17 @@ set -e
 echo "=== Benchmark Service Startup ==="
 echo "Bun version: $(bun --version)"
 
-# Set GOPATH to writable directory (matches PRE_DEPLOY_COMMAND)
-export GOPATH=/tmp/go
-export PATH=$PATH:/tmp/go/bin
-
-# Verify hey is available
-if command -v hey &> /dev/null; then
-    echo "hey tool available: $(which hey)"
+# Install hey from pre-built binary (no Go required)
+HEY_BIN="/tmp/hey"
+if [ -f "$HEY_BIN" ]; then
+    echo "hey tool available: $HEY_BIN"
 else
-    echo "Warning: hey tool not found, installing..."
-    go install github.com/rakyll/hey@latest
+    echo "Installing hey from pre-built binary..."
+    curl -sL https://hey-release.s3.us-east-2.amazonaws.com/hey_linux_amd64 -o "$HEY_BIN"
+    chmod +x "$HEY_BIN"
+    echo "hey installed: $HEY_BIN"
 fi
+export PATH=$PATH:/tmp
 
 # Show service URLs
 echo "BUN_URL: ${BUN_URL:-not set}"

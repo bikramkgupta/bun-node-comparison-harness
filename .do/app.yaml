@@ -113,7 +113,7 @@ services:
     image:
       registry_type: GHCR
       registry: bikramkgupta
-      repository: hot-reload-full
+      repository: hot-reload-bun
       tag: latest
 
     instance_count: 1
