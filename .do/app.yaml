@@ -15,7 +15,7 @@ region: syd1
 
 services:
   # ============================================
-  # Bun Service - Express Todo App on Bun
+  # Bun Service - Express Todo App on Bun (Internal)
   # ============================================
   - name: bun-service
     image:
@@ -26,7 +26,9 @@ services:
 
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-2gb
-    http_port: 8080
+    # Internal service - accessed by benchmark-service via PRIVATE_URL
+    internal_ports:
+      - 8080
 
     envs:
       - key: GITHUB_REPO_URL
@@ -46,7 +48,7 @@ services:
         scope: RUN_TIME
 
   # ============================================
-  # Node.js Service - Express Todo App on Node
+  # Node.js Service - Express Todo App on Node (Internal)
   # ============================================
   - name: nodejs-service
     image:
@@ -57,7 +59,9 @@ services:
 
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-2gb
-    http_port: 8080
+    # Internal service - accessed by benchmark-service via PRIVATE_URL
+    internal_ports:
+      - 8080
 
     envs:
       - key: GITHUB_REPO_URL
