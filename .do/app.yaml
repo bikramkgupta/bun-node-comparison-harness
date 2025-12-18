@@ -30,15 +30,16 @@ services:
     internal_ports:
       - 8080
 
-    # Delay health check to allow bun install to complete
+    # Use dev-health-server on port 9090 - always running throughout container lifecycle
+    # This ensures health checks pass during bun install (which can take 1-2 min)
     health_check:
-      http_path: /api/health
-      initial_delay_seconds: 120
+      http_path: /dev_health
+      initial_delay_seconds: 30
       period_seconds: 10
       timeout_seconds: 5
       success_threshold: 1
       failure_threshold: 6
-      port: 8080
+      port: 9090
 
     envs:
       - key: GITHUB_REPO_URL
@@ -73,15 +74,16 @@ services:
     internal_ports:
       - 8080
 
-    # Delay health check to allow npm install to complete (~1-2 min for 100 packages)
+    # Use dev-health-server on port 9090 - always running throughout container lifecycle
+    # This ensures health checks pass during npm install (which can take 1-5 min for 100 packages)
     health_check:
-      http_path: /api/health
-      initial_delay_seconds: 300
+      http_path: /dev_health
+      initial_delay_seconds: 30
       period_seconds: 10
       timeout_seconds: 5
       success_threshold: 1
       failure_threshold: 6
-      port: 8080
+      port: 9090
 
     envs:
       - key: GITHUB_REPO_URL
@@ -114,6 +116,16 @@ services:
     instance_size_slug: apps-s-1vcpu-2gb
     http_port: 8080
 
+    # Use dev-health-server on port 9090 - always running throughout container lifecycle
+    health_check:
+      http_path: /dev_health
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 6
+      port: 9090
+
     envs:
       - key: GITHUB_REPO_URL
         value: "https://github.com/bikramkgupta/bun-node-comparison-harness"
@@ -130,10 +142,7 @@ services:
       - key: GITHUB_SYNC_INTERVAL
         value: "15"
         scope: RUN_TIME
-      # Install hey tool before starting (set GOPATH to writable dir)
-      - key: PRE_DEPLOY_COMMAND
-        value: "export GOPATH=/tmp/go && export PATH=$PATH:/tmp/go/bin && go install github.com/rakyll/hey@latest"
-        scope: RUN_TIME
+      # NOTE: Removed PRE_DEPLOY_COMMAND - dev_startup.sh handles hey installation with proper Go env
       # Service discovery - App Platform internal URLs
       - key: BUN_URL
         value: "${bun-service.PRIVATE_URL}"
