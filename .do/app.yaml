@@ -30,6 +30,16 @@ services:
     internal_ports:
       - 8080
 
+    # Delay health check to allow bun install to complete
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 120
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 6
+      port: 8080
+
     envs:
       - key: GITHUB_REPO_URL
         value: "https://github.com/bikramkgupta/bun-node-comparison-harness"
@@ -62,6 +72,16 @@ services:
     # Internal service - accessed by benchmark-service via PRIVATE_URL
     internal_ports:
       - 8080
+
+    # Delay health check to allow npm install to complete (~1-2 min for 100 packages)
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 300
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 6
+      port: 8080
 
     envs:
       - key: GITHUB_REPO_URL
