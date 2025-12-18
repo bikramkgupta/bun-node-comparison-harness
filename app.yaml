@@ -41,7 +41,7 @@ services:
     repository: hot-reload-bun
     tag: latest
   instance_count: 1
-  instance_size_slug: apps-d-1vcpu-1gb
+  instance_size_slug: apps-d-1vcpu-2gb
   internal_ports:
   - 8080
   - 9090
@@ -76,7 +76,7 @@ services:
     repository: hot-reload-node
     tag: latest
   instance_count: 1
-  instance_size_slug: apps-d-1vcpu-1gb
+  instance_size_slug: apps-d-1vcpu-2gb
   internal_ports:
   - 8080
   - 9090
@@ -118,7 +118,7 @@ services:
     repository: hot-reload-bun
     tag: latest
   instance_count: 1
-  instance_size_slug: apps-d-1vcpu-1gb
+  instance_size_slug: apps-d-1vcpu-2gb
   internal_ports:
   - 9090
   name: benchmark-service
