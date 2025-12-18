@@ -110,9 +110,9 @@ services:
       - key: GITHUB_SYNC_INTERVAL
         value: "15"
         scope: RUN_TIME
-      # Install hey tool before starting
+      # Install hey tool before starting (set GOPATH to writable dir)
       - key: PRE_DEPLOY_COMMAND
-        value: "go install github.com/rakyll/hey@latest"
+        value: "export GOPATH=/tmp/go && export PATH=$PATH:/tmp/go/bin && go install github.com/rakyll/hey@latest"
         scope: RUN_TIME
       # Service discovery - App Platform internal URLs
       - key: BUN_URL

@@ -9,8 +9,9 @@ set -e
 echo "=== Benchmark Service Startup ==="
 echo "Bun version: $(bun --version)"
 
-# Add Go bin to PATH (hey is installed via PRE_DEPLOY_COMMAND)
-export PATH=$PATH:$(go env GOPATH 2>/dev/null)/bin:/root/go/bin
+# Set GOPATH to writable directory (matches PRE_DEPLOY_COMMAND)
+export GOPATH=/tmp/go
+export PATH=$PATH:/tmp/go/bin
 
 # Verify hey is available
 if command -v hey &> /dev/null; then
