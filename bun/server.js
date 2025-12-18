@@ -1,6 +1,3 @@
-// Handle SSL for DigitalOcean managed databases (must be first)
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 // ============================================
 // TIMING INSTRUMENTATION - Process Start
 // ============================================
@@ -14,24 +11,63 @@ console.log(`[TIMING] Process start timestamp: ${PROCESS_START_TIME}`);
 // ============================================
 const MODULE_LOAD_START = Date.now();
 
+// Core Express packages
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
-const { Pool } = require('pg');
 const path = require('path');
 const fs = require('fs');
 
-// Load some of the bulky packages to simulate real-world usage
+// Load MANY packages to simulate real-world enterprise app
+// Date/Time libraries
 const _ = require('lodash');
 const moment = require('moment');
 const dayjs = require('dayjs');
-const { v4: uuidv4 } = require('uuid');
-const Joi = require('joi');
-const winston = require('winston');
+const { format: formatDate } = require('date-fns');
+const { DateTime } = require('luxon');
 
-// Load dotenv for environment variables
+// HTTP clients (not used but loaded)
+const axios = require('axios');
+
+// Validation
+const Joi = require('joi');
+const yup = require('yup');
+const { z } = require('zod');
+const Ajv = require('ajv');
+
+// ID generation
+const { v4: uuidv4 } = require('uuid');
+const { nanoid } = require('nanoid');
+
+// Logging
+const winston = require('winston');
+const pino = require('pino');
+
+// State management (loaded but not used)
+const { createStore } = require('redux');
+const { createSlice } = require('@reduxjs/toolkit');
+const { produce } = require('immer');
+
+// Utilities
+const classnames = require('classnames');
+const { Map, List } = require('immutable');
+const R = require('ramda');
+const { Subject } = require('rxjs');
+const Bluebird = require('bluebird');
+const async = require('async');
+const EventEmitter3 = require('eventemitter3');
+
+// More utilities
+const semver = require('semver');
+const { glob } = require('glob');
+const debug = require('debug')('app');
+const ms = require('ms');
+const bytes = require('bytes');
+const qs = require('qs');
+
+// Load dotenv
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const MODULE_LOAD_END = Date.now();
@@ -42,6 +78,10 @@ console.log(`[TIMING] Module loading time: ${MODULE_LOAD_TIME}ms`);
 const RUNTIME = typeof Bun !== 'undefined' ? 'bun' : 'node';
 const RUNTIME_VERSION = typeof Bun !== 'undefined' ? Bun.version : process.version;
 console.log(`[RUNTIME] Running on: ${RUNTIME} ${RUNTIME_VERSION}`);
+
+// Count modules loaded (works in both Node and Bun)
+const modulesLoaded = typeof require.cache === 'object' ? Object.keys(require.cache).length : 'N/A';
+console.log(`[TIMING] Modules loaded: ${modulesLoaded}`);
 
 // ============================================
 // Logger Setup
@@ -60,38 +100,10 @@ const logger = winston.createLogger({
 });
 
 // ============================================
-// Database Setup
+// In-Memory Todo Storage (No Database)
 // ============================================
-const DB_CONNECT_START = Date.now();
-
-// Parse connection string and set SSL
-const connectionString = process.env.DATABASE_CONNECTION_STRING;
-const pool = new Pool({
-  connectionString: connectionString,
-  ssl: connectionString && connectionString.includes('sslmode=require')
-    ? { rejectUnauthorized: false }
-    : false
-});
-
-// Initialize database table
-async function initDatabase() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS todos (
-        id SERIAL PRIMARY KEY,
-        title VARCHAR(255) NOT NULL,
-        completed BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    const DB_CONNECT_END = Date.now();
-    console.log(`[TIMING] Database initialization time: ${DB_CONNECT_END - DB_CONNECT_START}ms`);
-    logger.info('Database table initialized successfully');
-  } catch (error) {
-    logger.error('Database initialization failed:', error.message);
-  }
-}
+let todos = [];
+let nextId = 1;
 
 // ============================================
 // Express App Setup
@@ -101,7 +113,7 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(helmet({
-  contentSecurityPolicy: false // Allow inline scripts for React
+  contentSecurityPolicy: false
 }));
 app.use(compression());
 app.use(cors());
@@ -109,11 +121,11 @@ app.use(morgan('combined'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files from public directory
+// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================
-// Validation Schemas (using Joi)
+// Validation Schema
 // ============================================
 const todoSchema = Joi.object({
   title: Joi.string().min(1).max(255).required()
@@ -132,85 +144,68 @@ app.get('/api/health', (req, res) => {
     runtime_version: RUNTIME_VERSION,
     uptime_ms: uptime,
     uptime_formatted: moment.duration(uptime).humanize(),
+    module_load_ms: MODULE_LOAD_TIME,
+    modules_loaded: modulesLoaded,
     process_start: PROCESS_START_ISO,
     current_time: dayjs().format('YYYY-MM-DD HH:mm:ss'),
-    request_id: uuidv4()
+    request_id: uuidv4(),
+    todo_count: todos.length
   });
 });
 
 // Get all todos
-app.get('/api/todos', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM todos ORDER BY created_at DESC'
-    );
-    res.json(result.rows);
-  } catch (error) {
-    logger.error('Error fetching todos:', error.message);
-    res.status(500).json({ error: 'Failed to fetch todos' });
-  }
+app.get('/api/todos', (req, res) => {
+  res.json(todos);
 });
 
 // Create a new todo
-app.post('/api/todos', async (req, res) => {
-  try {
-    const { error, value } = todoSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ error: error.details[0].message });
-    }
-
-    const result = await pool.query(
-      'INSERT INTO todos (title) VALUES ($1) RETURNING *',
-      [value.title]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    logger.error('Error creating todo:', error.message);
-    res.status(500).json({ error: 'Failed to create todo' });
+app.post('/api/todos', (req, res) => {
+  const { error, value } = todoSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ error: error.details[0].message });
   }
+
+  const todo = {
+    id: nextId++,
+    title: value.title,
+    completed: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  todos.unshift(todo);
+  res.status(201).json(todo);
 });
 
 // Toggle todo completion
-app.patch('/api/todos/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await pool.query(
-      `UPDATE todos
-       SET completed = NOT completed, updated_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
-      [id]
-    );
+app.patch('/api/todos/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const todoIndex = todos.findIndex(t => t.id === id);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Todo not found' });
-    }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    logger.error('Error updating todo:', error.message);
-    res.status(500).json({ error: 'Failed to update todo' });
+  if (todoIndex === -1) {
+    return res.status(404).json({ error: 'Todo not found' });
   }
+
+  todos[todoIndex] = {
+    ...todos[todoIndex],
+    completed: !todos[todoIndex].completed,
+    updated_at: new Date().toISOString()
+  };
+
+  res.json(todos[todoIndex]);
 });
 
 // Delete a todo
-app.delete('/api/todos/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await pool.query(
-      'DELETE FROM todos WHERE id = $1 RETURNING *',
-      [id]
-    );
+app.delete('/api/todos/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const todoIndex = todos.findIndex(t => t.id === id);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Todo not found' });
-    }
-
-    res.json({ message: 'Todo deleted successfully' });
-  } catch (error) {
-    logger.error('Error deleting todo:', error.message);
-    res.status(500).json({ error: 'Failed to delete todo' });
+  if (todoIndex === -1) {
+    return res.status(404).json({ error: 'Todo not found' });
   }
+
+  todos.splice(todoIndex, 1);
+  res.json({ message: 'Todo deleted successfully' });
 });
 
 // Serve React app for all other routes
@@ -221,51 +216,44 @@ app.get('*', (req, res) => {
 // ============================================
 // Start Server
 // ============================================
-async function startServer() {
-  await initDatabase();
+app.listen(PORT, () => {
+  const READY_TIME = Date.now();
+  const TOTAL_STARTUP_MS = READY_TIME - PROCESS_START_TIME;
 
-  app.listen(PORT, () => {
-    const READY_TIME = Date.now();
-    const TOTAL_STARTUP_MS = READY_TIME - PROCESS_START_TIME;
+  console.log('');
+  console.log('============================================');
+  console.log('[TIMING] STARTUP METRICS (No Database)');
+  console.log('============================================');
+  console.log(`[TIMING] Runtime: ${RUNTIME} ${RUNTIME_VERSION}`);
+  console.log(`[TIMING] Process started at: ${PROCESS_START_ISO}`);
+  console.log(`[TIMING] App ready at: ${new Date().toISOString()}`);
+  console.log(`[TIMING] Module loading: ${MODULE_LOAD_TIME}ms`);
+  console.log(`[TIMING] Modules loaded: ${modulesLoaded}`);
+  console.log(`[TIMING] Total startup time: ${TOTAL_STARTUP_MS}ms`);
+  console.log('============================================');
+  console.log(`Server running on http://localhost:${PORT}`);
+  console.log('============================================');
+  console.log('');
 
-    console.log('');
-    console.log('============================================');
-    console.log('[TIMING] STARTUP METRICS');
-    console.log('============================================');
-    console.log(`[TIMING] Runtime: ${RUNTIME} ${RUNTIME_VERSION}`);
-    console.log(`[TIMING] Process started at: ${PROCESS_START_ISO}`);
-    console.log(`[TIMING] App ready at: ${new Date().toISOString()}`);
-    console.log(`[TIMING] Module loading: ${MODULE_LOAD_TIME}ms`);
-    console.log(`[TIMING] Total startup time: ${TOTAL_STARTUP_MS}ms`);
-    console.log('============================================');
-    console.log(`Server running on http://localhost:${PORT}`);
-    console.log('============================================');
-    console.log('');
+  // Write timing to file
+  const timingData = {
+    process_start: PROCESS_START_ISO,
+    ready_at: new Date().toISOString(),
+    module_load_ms: MODULE_LOAD_TIME,
+    modules_loaded: modulesLoaded,
+    total_startup_ms: TOTAL_STARTUP_MS,
+    runtime: RUNTIME,
+    runtime_version: RUNTIME_VERSION
+  };
 
-    // Write timing to file (for Docker to capture)
-    const timingData = {
-      process_start: PROCESS_START_ISO,
-      ready_at: new Date().toISOString(),
-      module_load_ms: MODULE_LOAD_TIME,
-      total_startup_ms: TOTAL_STARTUP_MS,
-      runtime: RUNTIME,
-      runtime_version: RUNTIME_VERSION
-    };
+  try {
+    fs.writeFileSync(
+      path.join(__dirname, 'startup-timing.json'),
+      JSON.stringify(timingData, null, 2)
+    );
+  } catch (e) {
+    // Ignore file write errors
+  }
 
-    try {
-      fs.writeFileSync(
-        path.join(__dirname, 'startup-timing.json'),
-        JSON.stringify(timingData, null, 2)
-      );
-    } catch (e) {
-      // Ignore file write errors in read-only containers
-    }
-
-    logger.info(`Server started in ${TOTAL_STARTUP_MS}ms`);
-  });
-}
-
-startServer().catch(error => {
-  logger.error('Failed to start server:', error);
-  process.exit(1);
+  logger.info(`Server started in ${TOTAL_STARTUP_MS}ms`);
 });
