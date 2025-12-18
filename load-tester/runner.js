@@ -4,8 +4,10 @@
 import { $ } from "bun";
 
 const RESULTS_DIR = process.env.RESULTS_DIR || "/results";
-const BUN_URL = `http://${process.env.BUN_HOST || "bun-app"}:3000`;
-const NODEJS_URL = `http://${process.env.NODEJS_HOST || "nodejs-app"}:3000`;
+// For App Platform: use full URLs from env vars (e.g., http://bun-service:8080)
+// For Docker Compose: fallback to container names with port 3000
+const BUN_URL = process.env.BUN_URL || `http://${process.env.BUN_HOST || "bun-app"}:3000`;
+const NODEJS_URL = process.env.NODEJS_URL || `http://${process.env.NODEJS_HOST || "nodejs-app"}:3000`;
 
 // Store active runs
 const activeRuns = new Map();
