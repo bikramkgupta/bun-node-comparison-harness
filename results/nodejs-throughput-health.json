@@ -1,0 +1,10 @@
+{
+    "test": "Node.js",
+    "endpoint": "/api/health",
+    "duration": "240s",
+    "concurrency": 50,
+    "requests_per_second": 4602.2713,
+    "avg_latency_secs": "0.0120",
+    "p99_latency_secs": "in",
+    "total_requests": 240.0121
+}

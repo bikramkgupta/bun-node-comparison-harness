@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bun vs Node.js - Performance Benchmark</title>
+  <style>
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-card: #1a1a2e;
+      --bg-card-hover: #222236;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --bun-color: #00d4ff;
+      --bun-glow: rgba(0, 212, 255, 0.3);
+      --node-color: #4ade80;
+      --node-glow: rgba(74, 222, 128, 0.3);
+      --accent: #f472b6;
+      --border: #2d2d44;
+      --success: #22c55e;
+      --warning: #eab308;
+      --error: #ef4444;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Background Animation */
+    .bg-grid {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image:
+        linear-gradient(rgba(45, 45, 68, 0.3) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(45, 45, 68, 0.3) 1px, transparent 1px);
+      background-size: 50px 50px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Header */
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, var(--bun-color), var(--accent), var(--node-color));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+    }
+
+    /* Network Diagram */
+    .network-diagram {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .network-diagram h2 {
+      text-align: center;
+      margin-bottom: 1.5rem;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    .diagram-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 2rem;
+      padding: 1rem 0;
+    }
+
+    .node {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1.5rem 2rem;
+      border-radius: 12px;
+      background: var(--bg-secondary);
+      border: 2px solid var(--border);
+      transition: all 0.3s ease;
+      min-width: 140px;
+    }
+
+    .node.bun {
+      border-color: var(--bun-color);
+      box-shadow: 0 0 20px var(--bun-glow);
+    }
+
+    .node.nodejs {
+      border-color: var(--node-color);
+      box-shadow: 0 0 20px var(--node-glow);
+    }
+
+    .node.load-tester {
+      border-color: var(--accent);
+      box-shadow: 0 0 20px rgba(244, 114, 182, 0.3);
+      background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));
+    }
+
+    .node-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      font-weight: bold;
+    }
+
+    .node.bun .node-icon {
+      background: linear-gradient(135deg, var(--bun-color), #0099cc);
+      color: white;
+    }
+
+    .node.nodejs .node-icon {
+      background: linear-gradient(135deg, var(--node-color), #22c55e);
+      color: white;
+    }
+
+    .node.load-tester .node-icon {
+      background: linear-gradient(135deg, var(--accent), #ec4899);
+      color: white;
+    }
+
+    .node-label {
+      font-weight: 600;
+      font-size: 1rem;
+    }
+
+    .node-port {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .node-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.online { background: var(--success); }
+    .status-dot.offline { background: var(--error); animation: none; }
+    .status-dot.checking { background: var(--warning); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    .connection-line {
+      width: 80px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+      position: relative;
+    }
+
+    .connection-line::after {
+      content: '';
+      position: absolute;
+      top: -3px;
+      left: 0;
+      width: 20px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 4px;
+      animation: flowRight 2s linear infinite;
+      opacity: 0.8;
+    }
+
+    @keyframes flowRight {
+      0% { left: 0; opacity: 0; }
+      50% { opacity: 1; }
+      100% { left: calc(100% - 20px); opacity: 0; }
+    }
+
+    /* Main Content Grid */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    @media (max-width: 1024px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      border: 1px solid var(--border);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-header h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .card-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-secondary);
+    }
+
+    /* Form Elements */
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    select, input[type="number"] {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 1rem;
+      transition: border-color 0.2s;
+    }
+
+    select:focus, input:focus {
+      outline: none;
+      border-color: var(--bun-color);
+    }
+
+    select option {
+      background: var(--bg-secondary);
+    }
+
+    /* Range Slider */
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 6px;
+      background: var(--bg-secondary);
+      border-radius: 3px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      background: var(--bun-color);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    .slider-value {
+      min-width: 60px;
+      text-align: right;
+      font-weight: 600;
+      color: var(--bun-color);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.875rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--bun-color), #0099cc);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px var(--bun-glow);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    /* Progress Section */
+    .progress-section {
+      display: none;
+      margin-top: 1.5rem;
+    }
+
+    .progress-section.active {
+      display: block;
+    }
+
+    .progress-bar-container {
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      height: 8px;
+      overflow: hidden;
+      margin-bottom: 0.75rem;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--bun-color), var(--accent));
+      border-radius: 8px;
+      transition: width 0.3s ease;
+      position: relative;
+    }
+
+    .progress-bar::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    .progress-text {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    /* Results Section */
+    .results-section {
+      display: none;
+    }
+
+    .results-section.active {
+      display: block;
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .result-card {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      padding: 1.25rem;
+      border: 2px solid transparent;
+      transition: all 0.3s;
+    }
+
+    .result-card.bun {
+      border-color: var(--bun-color);
+    }
+
+    .result-card.nodejs {
+      border-color: var(--node-color);
+    }
+
+    .result-card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .result-runtime {
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .result-card.bun .result-runtime { color: var(--bun-color); }
+    .result-card.nodejs .result-runtime { color: var(--node-color); }
+
+    .result-value {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+
+    .result-card.bun .result-value { color: var(--bun-color); }
+    .result-card.nodejs .result-value { color: var(--node-color); }
+
+    .result-label {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    /* Comparison Bar */
+    .comparison-bar {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .comparison-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .bar-container {
+      display: flex;
+      height: 32px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg-secondary);
+    }
+
+    .bar-segment {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: width 1s ease;
+    }
+
+    .bar-segment.bun {
+      background: linear-gradient(90deg, var(--bun-color), #0099cc);
+      color: white;
+    }
+
+    .bar-segment.nodejs {
+      background: linear-gradient(90deg, #22c55e, var(--node-color));
+      color: white;
+    }
+
+    .improvement-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.25rem;
+      background: linear-gradient(135deg, var(--bun-glow), rgba(244, 114, 182, 0.2));
+      border: 1px solid var(--bun-color);
+      border-radius: 8px;
+      margin-top: 1rem;
+    }
+
+    .improvement-badge .value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--bun-color);
+    }
+
+    .improvement-badge .label {
+      color: var(--text-secondary);
+    }
+
+    /* Historical Reports */
+    .reports-section {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      border: 1px solid var(--border);
+    }
+
+    .reports-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      cursor: pointer;
+    }
+
+    .reports-header h3 {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .reports-toggle {
+      transition: transform 0.3s;
+    }
+
+    .reports-toggle.expanded {
+      transform: rotate(180deg);
+    }
+
+    .reports-list {
+      display: none;
+    }
+
+    .reports-list.expanded {
+      display: block;
+    }
+
+    .report-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .report-item:hover {
+      background: var(--bg-card-hover);
+      transform: translateX(4px);
+    }
+
+    .report-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .report-name {
+      font-weight: 600;
+    }
+
+    .report-time {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .report-stats {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .report-stat {
+      text-align: right;
+    }
+
+    .report-stat-value {
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .report-stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .report-stat.bun .report-stat-value { color: var(--bun-color); }
+    .report-stat.nodejs .report-stat-value { color: var(--node-color); }
+
+    .empty-state {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-muted);
+    }
+
+    /* Loading Spinner */
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Animations */
+    .fade-in {
+      animation: fadeIn 0.5s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .counter {
+      display: inline-block;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 2rem 0;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    footer a {
+      color: var(--bun-color);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Throughput Metrics Section */
+    .throughput-metrics {
+      display: none;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .throughput-metrics.active {
+      display: grid;
+    }
+
+    .metric-item {
+      text-align: center;
+    }
+
+    .metric-label {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 0.5rem;
+    }
+
+    .metric-values {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+    }
+
+    .metric-value {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .metric-value.bun {
+      color: var(--bun-color);
+    }
+
+    .metric-value.nodejs {
+      color: var(--node-color);
+    }
+
+    .metric-vs {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+
+  <div class="container">
+    <header>
+      <h1>Bun vs Node.js</h1>
+      <p class="subtitle">Performance Benchmark Dashboard</p>
+    </header>
+
+    <!-- Network Diagram -->
+    <section class="network-diagram">
+      <h2>Architecture</h2>
+      <div class="diagram-container">
+        <div class="node bun">
+          <div class="node-icon">B</div>
+          <span class="node-label">Bun App</span>
+          <span class="node-port">Port 3000</span>
+          <div class="node-status">
+            <span class="status-dot checking" id="bun-status"></span>
+            <span id="bun-status-text">Checking...</span>
+          </div>
+        </div>
+
+        <div class="connection-line"></div>
+
+        <div class="node load-tester">
+          <div class="node-icon">LT</div>
+          <span class="node-label">Load Tester</span>
+          <span class="node-port">Port 8080</span>
+          <div class="node-status">
+            <span class="status-dot online"></span>
+            <span>Active</span>
+          </div>
+        </div>
+
+        <div class="connection-line" style="transform: scaleX(-1);"></div>
+
+        <div class="node nodejs">
+          <div class="node-icon">N</div>
+          <span class="node-label">Node.js App</span>
+          <span class="node-port">Port 3000</span>
+          <div class="node-status">
+            <span class="status-dot checking" id="nodejs-status"></span>
+            <span id="nodejs-status-text">Checking...</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Content -->
+    <div class="main-grid">
+      <!-- Configuration Panel -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon">&#9881;</div>
+          <h3>Test Configuration</h3>
+        </div>
+
+        <form id="benchmark-form">
+          <div class="form-group">
+            <label for="test-type">Test Type</label>
+            <select id="test-type" name="testType">
+              <option value="throughput-todos">HTTP Throughput (/api/todos)</option>
+              <option value="throughput-health">HTTP Throughput (/api/health)</option>
+              <option value="cpu-heavy">CPU Heavy (100k Sort)</option>
+              <option value="fibonacci">Fibonacci (n=40)</option>
+              <option value="full-suite">Full Benchmark Suite</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="duration-group">
+            <label for="duration">Duration</label>
+            <div class="slider-container">
+              <input type="range" id="duration" name="duration" min="10" max="300" value="30">
+              <span class="slider-value" id="duration-value">30s</span>
+            </div>
+          </div>
+
+          <div class="form-group" id="concurrency-group">
+            <label for="concurrency">Concurrency</label>
+            <div class="slider-container">
+              <input type="range" id="concurrency" name="concurrency" min="10" max="200" value="50">
+              <span class="slider-value" id="concurrency-value">50</span>
+            </div>
+          </div>
+
+          <div class="form-group" id="iterations-group" style="display: none;">
+            <label for="iterations">Iterations</label>
+            <div class="slider-container">
+              <input type="range" id="iterations" name="iterations" min="5" max="50" value="10">
+              <span class="slider-value" id="iterations-value">10</span>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="run-btn">
+            <span id="run-btn-text">Run Benchmark</span>
+            <div class="spinner" id="run-spinner" style="display: none;"></div>
+          </button>
+        </form>
+
+        <div class="progress-section" id="progress-section">
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+          </div>
+          <p class="progress-text" id="progress-text">Initializing...</p>
+        </div>
+      </div>
+
+      <!-- Results Panel -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon">&#128200;</div>
+          <h3>Results</h3>
+        </div>
+
+        <div id="results-placeholder">
+          <div class="empty-state">
+            <p>Run a benchmark to see results</p>
+          </div>
+        </div>
+
+        <div class="results-section" id="results-section">
+          <div class="results-grid">
+            <div class="result-card bun">
+              <div class="result-card-header">
+                <span class="result-runtime">Bun</span>
+              </div>
+              <div class="result-value" id="bun-result">-</div>
+              <div class="result-label" id="bun-label">-</div>
+            </div>
+
+            <div class="result-card nodejs">
+              <div class="result-card-header">
+                <span class="result-runtime">Node.js</span>
+              </div>
+              <div class="result-value" id="nodejs-result">-</div>
+              <div class="result-label" id="nodejs-label">-</div>
+            </div>
+          </div>
+
+          <div class="comparison-bar">
+            <div class="comparison-header">
+              <span style="color: var(--bun-color);">Bun</span>
+              <span style="color: var(--node-color);">Node.js</span>
+            </div>
+            <div class="bar-container">
+              <div class="bar-segment bun" id="bun-bar" style="width: 50%;"></div>
+              <div class="bar-segment nodejs" id="nodejs-bar" style="width: 50%;"></div>
+            </div>
+          </div>
+
+          <div class="improvement-badge" id="improvement-badge">
+            <span class="value" id="improvement-value">-</span>
+            <span class="label">faster with Bun</span>
+          </div>
+
+          <!-- Throughput Metrics (hidden for CPU/Fibonacci tests) -->
+          <div class="throughput-metrics" id="throughput-metrics">
+            <div class="metric-item">
+              <div class="metric-label">Avg Latency</div>
+              <div class="metric-values">
+                <span class="metric-value bun" id="bun-latency">-</span>
+                <span class="metric-vs">vs</span>
+                <span class="metric-value nodejs" id="nodejs-latency">-</span>
+              </div>
+            </div>
+            <div class="metric-item">
+              <div class="metric-label">P99 Latency</div>
+              <div class="metric-values">
+                <span class="metric-value bun" id="bun-p99">-</span>
+                <span class="metric-vs">vs</span>
+                <span class="metric-value nodejs" id="nodejs-p99">-</span>
+              </div>
+            </div>
+            <div class="metric-item">
+              <div class="metric-label">Total Requests</div>
+              <div class="metric-values">
+                <span class="metric-value bun" id="bun-total">-</span>
+                <span class="metric-vs">vs</span>
+                <span class="metric-value nodejs" id="nodejs-total">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Historical Reports -->
+    <section class="reports-section">
+      <div class="reports-header" id="reports-toggle">
+        <h3>
+          <span>&#128203;</span>
+          Previous Runs
+          <span id="reports-count" style="color: var(--text-muted); font-weight: normal;"></span>
+        </h3>
+        <span class="reports-toggle" id="toggle-icon">&#9660;</span>
+      </div>
+
+      <div class="reports-list" id="reports-list">
+        <div class="empty-state" id="reports-empty">
+          <p>No previous benchmark runs</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p>Built with <span style="color: var(--bun-color);">Bun</span> | <a href="https://bun.sh" target="_blank">bun.sh</a></p>
+    </footer>
+  </div>
+
+  <script>
+    // State
+    let currentRunId = null;
+    let pollInterval = null;
+
+    // DOM Elements
+    const form = document.getElementById('benchmark-form');
+    const testType = document.getElementById('test-type');
+    const duration = document.getElementById('duration');
+    const concurrency = document.getElementById('concurrency');
+    const iterations = document.getElementById('iterations');
+    const runBtn = document.getElementById('run-btn');
+    const runBtnText = document.getElementById('run-btn-text');
+    const runSpinner = document.getElementById('run-spinner');
+    const progressSection = document.getElementById('progress-section');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const resultsSection = document.getElementById('results-section');
+    const resultsPlaceholder = document.getElementById('results-placeholder');
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      checkServices();
+      loadReports();
+      setupSliders();
+      setupTestTypeToggle();
+    });
+
+    // Check backend services health
+    async function checkServices() {
+      try {
+        const response = await fetch('/api/services');
+        const data = await response.json();
+
+        updateServiceStatus('bun', data.bun);
+        updateServiceStatus('nodejs', data.nodejs);
+      } catch (error) {
+        updateServiceStatus('bun', { error: 'Unreachable' });
+        updateServiceStatus('nodejs', { error: 'Unreachable' });
+      }
+    }
+
+    function updateServiceStatus(service, status) {
+      const dot = document.getElementById(`${service}-status`);
+      const text = document.getElementById(`${service}-status-text`);
+
+      if (status?.error) {
+        dot.className = 'status-dot offline';
+        text.textContent = 'Offline';
+      } else if (status?.runtime) {
+        dot.className = 'status-dot online';
+        text.textContent = `v${status.version || 'N/A'}`;
+      }
+    }
+
+    // Setup sliders
+    function setupSliders() {
+      duration.addEventListener('input', () => {
+        document.getElementById('duration-value').textContent = `${duration.value}s`;
+      });
+
+      concurrency.addEventListener('input', () => {
+        document.getElementById('concurrency-value').textContent = concurrency.value;
+      });
+
+      iterations.addEventListener('input', () => {
+        document.getElementById('iterations-value').textContent = iterations.value;
+      });
+    }
+
+    // Toggle form fields based on test type
+    function setupTestTypeToggle() {
+      testType.addEventListener('change', () => {
+        const type = testType.value;
+        const durationGroup = document.getElementById('duration-group');
+        const concurrencyGroup = document.getElementById('concurrency-group');
+        const iterationsGroup = document.getElementById('iterations-group');
+
+        if (type === 'cpu-heavy' || type === 'fibonacci') {
+          durationGroup.style.display = 'none';
+          concurrencyGroup.style.display = 'none';
+          iterationsGroup.style.display = 'block';
+        } else {
+          durationGroup.style.display = 'block';
+          concurrencyGroup.style.display = 'block';
+          iterationsGroup.style.display = 'none';
+        }
+      });
+    }
+
+    // Form submission
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const type = testType.value;
+      const config = {
+        testType: type,
+        duration: `${duration.value}s`,
+        concurrency: parseInt(concurrency.value),
+        iterations: parseInt(iterations.value)
+      };
+
+      await startBenchmark(config);
+    });
+
+    // Start benchmark
+    async function startBenchmark(config) {
+      try {
+        setRunning(true);
+
+        const response = await fetch('/api/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        currentRunId = data.runId;
+        startPolling();
+
+      } catch (error) {
+        setRunning(false);
+        alert('Failed to start benchmark: ' + error.message);
+      }
+    }
+
+    // Polling for status
+    function startPolling() {
+      if (pollInterval) clearInterval(pollInterval);
+
+      pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/status/${currentRunId}`);
+          const data = await response.json();
+
+          updateProgress(data);
+
+          if (data.status === 'complete' || data.status === 'error') {
+            stopPolling();
+            setRunning(false);
+
+            if (data.status === 'complete') {
+              displayResults(data);
+              loadReports();
+            } else {
+              alert('Benchmark failed: ' + (data.error || 'Unknown error'));
+            }
+          }
+        } catch (error) {
+          console.error('Polling error:', error);
+        }
+      }, 1000);
+    }
+
+    function stopPolling() {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    }
+
+    // Update progress UI
+    function updateProgress(data) {
+      progressBar.style.width = `${data.progress}%`;
+      progressText.textContent = data.progressText || 'Running...';
+    }
+
+    // Set running state
+    function setRunning(running) {
+      runBtn.disabled = running;
+      runBtnText.textContent = running ? 'Running...' : 'Run Benchmark';
+      runSpinner.style.display = running ? 'block' : 'none';
+      progressSection.classList.toggle('active', running);
+    }
+
+    // Display results
+    function displayResults(data) {
+      resultsPlaceholder.style.display = 'none';
+      resultsSection.classList.add('active');
+      resultsSection.classList.add('fade-in');
+
+      const type = data.testType || testType.value;
+      let bunValue, nodeValue, bunLabel, nodeLabel, improvement;
+
+      if (type === 'full-suite') {
+        // Show throughput todos results for full suite
+        const bunTodos = data.results?.bun?.throughput?.todos;
+        const nodeTodos = data.results?.nodejs?.throughput?.todos;
+
+        bunValue = bunTodos?.requests_per_second?.toFixed(0) || '-';
+        nodeValue = nodeTodos?.requests_per_second?.toFixed(0) || '-';
+        bunLabel = 'requests/sec (todos)';
+        nodeLabel = 'requests/sec (todos)';
+        improvement = data.summary?.improvements?.throughputTodos || '-';
+
+      } else if (type.startsWith('throughput')) {
+        bunValue = data.results?.bun?.requests_per_second?.toFixed(0) || '-';
+        nodeValue = data.results?.nodejs?.requests_per_second?.toFixed(0) || '-';
+        bunLabel = 'requests/sec';
+        nodeLabel = 'requests/sec';
+        improvement = data.summary?.improvements?.throughput || '-';
+
+      } else if (type === 'cpu-heavy') {
+        bunValue = data.results?.bun?.avg_duration_ms || '-';
+        nodeValue = data.results?.nodejs?.avg_duration_ms || '-';
+        bunLabel = 'ms average';
+        nodeLabel = 'ms average';
+        improvement = data.summary?.improvements?.cpu || '-';
+
+      } else if (type === 'fibonacci') {
+        bunValue = data.results?.bun?.avg_duration_ms || '-';
+        nodeValue = data.results?.nodejs?.avg_duration_ms || '-';
+        bunLabel = 'ms average';
+        nodeLabel = 'ms average';
+        improvement = data.summary?.improvements?.fibonacci || '-';
+      }
+
+      // Update values with counter animation
+      animateCounter(document.getElementById('bun-result'), bunValue);
+      animateCounter(document.getElementById('nodejs-result'), nodeValue);
+      document.getElementById('bun-label').textContent = bunLabel;
+      document.getElementById('nodejs-label').textContent = nodeLabel;
+
+      // Update comparison bar
+      const total = (parseFloat(bunValue) || 0) + (parseFloat(nodeValue) || 0);
+      if (total > 0) {
+        const bunPercent = ((parseFloat(bunValue) || 0) / total * 100).toFixed(0);
+        const nodePercent = 100 - bunPercent;
+
+        // For time-based tests, swap the logic (faster = better)
+        if (type === 'cpu-heavy' || type === 'fibonacci') {
+          document.getElementById('bun-bar').style.width = `${nodePercent}%`;
+          document.getElementById('nodejs-bar').style.width = `${bunPercent}%`;
+        } else {
+          document.getElementById('bun-bar').style.width = `${bunPercent}%`;
+          document.getElementById('nodejs-bar').style.width = `${nodePercent}%`;
+        }
+      }
+
+      // Update improvement badge
+      document.getElementById('improvement-value').textContent = `${improvement}x`;
+
+      // Update throughput metrics (only for throughput tests)
+      const throughputMetrics = document.getElementById('throughput-metrics');
+      if (type.startsWith('throughput') || type === 'full-suite') {
+        throughputMetrics.classList.add('active');
+
+        // Get the correct results based on test type
+        let bunResults, nodeResults;
+        if (type === 'full-suite') {
+          bunResults = data.results?.bun?.throughput?.todos;
+          nodeResults = data.results?.nodejs?.throughput?.todos;
+        } else {
+          bunResults = data.results?.bun;
+          nodeResults = data.results?.nodejs;
+        }
+
+        // Populate latency metrics
+        document.getElementById('bun-latency').textContent = formatLatency(bunResults?.avg_latency_secs);
+        document.getElementById('nodejs-latency').textContent = formatLatency(nodeResults?.avg_latency_secs);
+
+        // Populate P99 latency
+        document.getElementById('bun-p99').textContent = formatLatency(bunResults?.p99_latency_secs);
+        document.getElementById('nodejs-p99').textContent = formatLatency(nodeResults?.p99_latency_secs);
+
+        // Populate total requests
+        document.getElementById('bun-total').textContent = formatNumber(bunResults?.total_requests);
+        document.getElementById('nodejs-total').textContent = formatNumber(nodeResults?.total_requests);
+      } else {
+        throughputMetrics.classList.remove('active');
+      }
+    }
+
+    // Counter animation
+    function animateCounter(element, target) {
+      const targetNum = parseFloat(target);
+      if (isNaN(targetNum)) {
+        element.textContent = target;
+        return;
+      }
+
+      const duration = 1000;
+      const steps = 30;
+      const increment = targetNum / steps;
+      let current = 0;
+      let step = 0;
+
+      const timer = setInterval(() => {
+        step++;
+        current = Math.min(current + increment, targetNum);
+
+        if (step >= steps) {
+          element.textContent = targetNum.toLocaleString();
+          clearInterval(timer);
+        } else {
+          element.textContent = Math.floor(current).toLocaleString();
+        }
+      }, duration / steps);
+    }
+
+    // Format large numbers with K/M suffix
+    function formatNumber(num) {
+      if (num === null || num === undefined || isNaN(num)) return '-';
+      if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+      if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+      return num.toLocaleString();
+    }
+
+    // Format latency from seconds to ms
+    function formatLatency(secs) {
+      if (secs === null || secs === undefined || isNaN(secs)) return '-';
+      const ms = secs * 1000;
+      if (ms < 1) return ms.toFixed(2) + 'ms';
+      if (ms < 10) return ms.toFixed(1) + 'ms';
+      return Math.round(ms) + 'ms';
+    }
+
+    // Load historical reports
+    async function loadReports() {
+      try {
+        const response = await fetch('/api/reports');
+        const data = await response.json();
+
+        const list = document.getElementById('reports-list');
+        const empty = document.getElementById('reports-empty');
+        const count = document.getElementById('reports-count');
+
+        if (data.reports && data.reports.length > 0) {
+          empty.style.display = 'none';
+          count.textContent = `(${data.reports.length})`;
+
+          const reportsHtml = data.reports.map(report => {
+            const time = new Date(report.startTime).toLocaleString();
+            const improvement = report.summary?.improvements?.throughput ||
+                               report.summary?.improvements?.throughputTodos ||
+                               report.summary?.improvements?.cpu ||
+                               report.summary?.improvements?.fibonacci || '-';
+
+            return `
+              <div class="report-item" onclick="viewReport('${report.id}')">
+                <div class="report-info">
+                  <span class="report-name">${report.testName || report.testType}</span>
+                  <span class="report-time">${time}</span>
+                </div>
+                <div class="report-stats">
+                  <div class="report-stat">
+                    <div class="report-stat-value" style="color: var(--bun-color);">${improvement}x</div>
+                    <div class="report-stat-label">Improvement</div>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          // Keep empty state but add reports before it
+          list.innerHTML = reportsHtml + empty.outerHTML;
+        } else {
+          count.textContent = '';
+        }
+      } catch (error) {
+        console.error('Failed to load reports:', error);
+      }
+    }
+
+    // View specific report
+    async function viewReport(reportId) {
+      try {
+        const response = await fetch(`/api/status/${reportId}`);
+        const data = await response.json();
+
+        if (data.error) {
+          alert('Failed to load report');
+          return;
+        }
+
+        displayResults(data);
+
+        // Scroll to results
+        resultsSection.scrollIntoView({ behavior: 'smooth' });
+      } catch (error) {
+        console.error('Failed to view report:', error);
+      }
+    }
+
+    // Toggle reports section
+    document.getElementById('reports-toggle').addEventListener('click', () => {
+      const list = document.getElementById('reports-list');
+      const icon = document.getElementById('toggle-icon');
+
+      list.classList.toggle('expanded');
+      icon.classList.toggle('expanded');
+    });
+
+    // Refresh services every 30 seconds
+    setInterval(checkServices, 30000);
+  </script>
+</body>
+</html>

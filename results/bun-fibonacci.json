@@ -1,0 +1,8 @@
+{
+    "test": "Bun",
+    "operation": "fibonacci",
+    "n": 40,
+    "iterations": 5,
+    "avg_duration_ms": 491,
+    "all_durations_ms": [409,511,510,511,517]
+}

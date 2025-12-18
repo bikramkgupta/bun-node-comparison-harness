@@ -1,0 +1,92 @@
+name: bun-benchmark-devcontainer  # Change this for multi-workspace support
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/base:noble
+    profiles: [ "app" ]
+    volumes:
+      - ..:/workspaces/bun:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Add these for credential persistence
+      - app-config:/home/vscode/.config      # All .config tools (gh, doctl, etc.)
+      - claude-config:/home/vscode/.claude
+      - codex-config:/home/vscode/.codex
+    # Overrides default command so things don't shut down after the process ends.
+    command: sleep infinity
+    networks:
+      - devcontainer-network
+
+  # Benchmark services - can be started on-demand with --profile benchmark
+  # Build contexts are relative to .devcontainer/ directory
+  bun-app:
+    build:
+      context: ../bun
+      dockerfile: Dockerfile
+    profiles: [ "benchmark" ]
+    container_name: bun-benchmark
+    ports:
+      - "127.0.0.1:0:3000"
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - benchmark-net
+
+  nodejs-app:
+    build:
+      context: ../nodejs
+      dockerfile: Dockerfile
+    profiles: [ "benchmark" ]
+    container_name: nodejs-benchmark
+    ports:
+      - "127.0.0.1:0:3000"
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - benchmark-net
+
+  load-tester:
+    build:
+      context: ../load-tester
+      dockerfile: Dockerfile
+    profiles: [ "benchmark" ]
+    container_name: benchmark-dashboard
+    ports:
+      - "127.0.0.1:0:8080"
+    depends_on:
+      bun-app:
+        condition: service_healthy
+      nodejs-app:
+        condition: service_healthy
+    volumes:
+      - ../results:/results
+    environment:
+      - PORT=8080
+      - RESULTS_DIR=/results
+      - BUN_HOST=bun-app
+      - NODEJS_HOST=nodejs-app
+    networks:
+      - benchmark-net
+    restart: unless-stopped
+
+volumes:
+  app-config:
+  claude-config:
+  codex-config:
+
+networks:
+  devcontainer-network:
+    driver: bridge
+  benchmark-net:
+    driver: bridge
+
