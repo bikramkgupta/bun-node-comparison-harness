@@ -117,7 +117,7 @@ services:
       tag: latest
 
     instance_count: 1
-    instance_size_slug: apps-s-1vcpu-2gb
+    instance_size_slug: apps-s-2vcpu-4gb
     http_port: 8080
     # Port 9090 is for the dev-health-server (health checks during install)
     internal_ports:
