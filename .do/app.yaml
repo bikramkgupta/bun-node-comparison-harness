@@ -27,8 +27,10 @@ services:
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-2gb
     # Internal service - accessed by benchmark-service via PRIVATE_URL
+    # Port 9090 is for the dev-health-server (health checks during install)
     internal_ports:
       - 8080
+      - 9090
 
     # Use dev-health-server on port 9090 - always running throughout container lifecycle
     # This ensures health checks pass during bun install (which can take 1-2 min)
@@ -71,8 +73,10 @@ services:
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-2gb
     # Internal service - accessed by benchmark-service via PRIVATE_URL
+    # Port 9090 is for the dev-health-server (health checks during install)
     internal_ports:
       - 8080
+      - 9090
 
     # Use dev-health-server on port 9090 - always running throughout container lifecycle
     # This ensures health checks pass during npm install (which can take 1-5 min for 100 packages)
@@ -115,6 +119,9 @@ services:
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-2gb
     http_port: 8080
+    # Port 9090 is for the dev-health-server (health checks during install)
+    internal_ports:
+      - 9090
 
     # Use dev-health-server on port 9090 - always running throughout container lifecycle
     health_check:
