@@ -1368,6 +1368,13 @@
         bunLabel = 'max concurrent';
         nodeLabel = 'max concurrent';
         improvement = data.summary?.improvements?.concurrency || '-';
+
+      } else if (type === 'json-processing') {
+        bunValue = data.results?.bun?.avg_total_ms || '-';
+        nodeValue = data.results?.nodejs?.avg_total_ms || '-';
+        bunLabel = 'ms per operation';
+        nodeLabel = 'ms per operation';
+        improvement = data.summary?.improvements?.json || '-';
       }
 
       // Update values with counter animation
@@ -1383,7 +1390,7 @@
         const nodePercent = 100 - bunPercent;
 
         // For time-based tests, swap the logic (faster = better)
-        if (type === 'cpu-heavy' || type === 'fibonacci') {
+        if (type === 'cpu-heavy' || type === 'fibonacci' || type === 'json-processing') {
           document.getElementById('bun-bar').style.width = `${nodePercent}%`;
           document.getElementById('nodejs-bar').style.width = `${bunPercent}%`;
         } else {
@@ -1401,7 +1408,7 @@
         improvementLabel = 'higher throughput with Bun';
       } else if (type === 'concurrent-sessions') {
         improvementLabel = 'more concurrent sessions with Bun';
-      } else if (type === 'cpu-heavy' || type === 'fibonacci') {
+      } else if (type === 'cpu-heavy' || type === 'fibonacci' || type === 'json-processing') {
         improvementLabel = 'faster with Bun';
       }
       document.getElementById('improvement-label').textContent = improvementLabel;
@@ -1440,8 +1447,8 @@
           document.getElementById('bun-total').textContent = formatNumber(bunResults?.total_requests);
           document.getElementById('nodejs-total').textContent = formatNumber(nodeResults?.total_requests);
         }
-      } else if (type === 'concurrent-sessions') {
-        // Hide throughput metrics for concurrent sessions test
+      } else if (type === 'concurrent-sessions' || type === 'json-processing') {
+        // Hide throughput metrics for concurrent sessions and json tests
         throughputMetrics.classList.remove('active');
       } else {
         throughputMetrics.classList.remove('active');
@@ -1511,7 +1518,8 @@
             const improvement = report.summary?.improvements?.throughput ||
                                report.summary?.improvements?.throughputTodos ||
                                report.summary?.improvements?.cpu ||
-                               report.summary?.improvements?.fibonacci || '-';
+                               report.summary?.improvements?.fibonacci ||
+                               report.summary?.improvements?.json || '-';
 
             // Build expanded details section
             const detailsHtml = buildReportDetails(report);
@@ -1778,6 +1786,44 @@
             <span class="report-details-value">${details.nodejs?.testedLevels || '-'}</span>
           </div>
         `;
+      } else if (testType === 'json-processing') {
+        // JSON processing details
+        bunRows = `
+          <div class="report-details-row">
+            <span class="report-details-label">Avg Total</span>
+            <span class="report-details-value">${details.bun?.avgTotalMs || '-'}ms</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Stringify</span>
+            <span class="report-details-value">${details.bun?.avgStringifyMs || '-'}ms</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Parse</span>
+            <span class="report-details-value">${details.bun?.avgParseMs || '-'}ms</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">JSON Size</span>
+            <span class="report-details-value">${details.bun?.jsonSizeKb || '-'} KB</span>
+          </div>
+        `;
+        nodeRows = `
+          <div class="report-details-row">
+            <span class="report-details-label">Avg Total</span>
+            <span class="report-details-value">${details.nodejs?.avgTotalMs || '-'}ms</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Stringify</span>
+            <span class="report-details-value">${details.nodejs?.avgStringifyMs || '-'}ms</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Parse</span>
+            <span class="report-details-value">${details.nodejs?.avgParseMs || '-'}ms</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">JSON Size</span>
+            <span class="report-details-value">${details.nodejs?.jsonSizeKb || '-'} KB</span>
+          </div>
+        `;
       } else if (testType === 'full-suite') {
         // Full suite details - all 7 test types
         bunRows = `
@@ -1809,6 +1855,10 @@
             <span class="report-details-label">Max Concurrent</span>
             <span class="report-details-value">${details.bun?.maxConcurrent || '-'}</span>
           </div>
+          <div class="report-details-row">
+            <span class="report-details-label">JSON Processing</span>
+            <span class="report-details-value">${details.bun?.jsonAvgMs || '-'}ms</span>
+          </div>
         `;
         nodeRows = `
           <div class="report-details-row">
@@ -1838,6 +1888,10 @@
           <div class="report-details-row">
             <span class="report-details-label">Max Concurrent</span>
             <span class="report-details-value">${details.nodejs?.maxConcurrent || '-'}</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">JSON Processing</span>
+            <span class="report-details-value">${details.nodejs?.jsonAvgMs || '-'}ms</span>
           </div>
         `;
       }

@@ -119,6 +119,12 @@ export const TEST_TYPES = {
     type: "concurrent-sessions",
     description: "Test maximum concurrent connections the server can handle"
   },
+  "json-processing": {
+    name: "JSON Parse/Serialize",
+    endpoint: "/api/json-benchmark/medium",
+    type: "json",
+    description: "Measure JSON stringify and parse performance"
+  },
   "full-suite": {
     name: "Full Benchmark Suite",
     endpoint: "all",
@@ -434,6 +440,52 @@ async function runConcurrentSessionsTest(name, url, duration, maxConcurrency = 2
   };
 }
 
+// Run JSON Processing test
+async function runJsonTest(name, url, iterations = 100) {
+  const endpoint = `/api/json-benchmark/medium`;
+  const fullUrl = `${url}${endpoint}`;
+  const results = [];
+
+  for (let i = 0; i < iterations; i++) {
+    try {
+      const response = await fetch(fullUrl);
+      const data = await response.json();
+      results.push({
+        iteration: i + 1,
+        json_kb: parseFloat(data.json_kb),
+        stringify_ms: data.timings_ms.stringify,
+        parse_ms: data.timings_ms.parse,
+        total_ms: data.timings_ms.total
+      });
+    } catch (error) {
+      results.push({ iteration: i + 1, error: error.message });
+    }
+  }
+
+  const successful = results.filter(r => !r.error);
+  const avgStringify = successful.length > 0
+    ? successful.reduce((sum, r) => sum + r.stringify_ms, 0) / successful.length
+    : 0;
+  const avgParse = successful.length > 0
+    ? successful.reduce((sum, r) => sum + r.parse_ms, 0) / successful.length
+    : 0;
+  const avgTotal = successful.length > 0
+    ? successful.reduce((sum, r) => sum + r.total_ms, 0) / successful.length
+    : 0;
+
+  return {
+    test: name,
+    endpoint,
+    type: "json",
+    iterations,
+    successful_iterations: successful.length,
+    avg_stringify_ms: avgStringify.toFixed(3),
+    avg_parse_ms: avgParse.toFixed(3),
+    avg_total_ms: avgTotal.toFixed(3),
+    json_size_kb: successful[0]?.json_kb || 0
+  };
+}
+
 // Check if services are healthy
 export async function checkServicesHealth() {
   const results = { bun: null, nodejs: null };
@@ -519,6 +571,8 @@ async function runBenchmarkAsync(runId, testType, duration, concurrency, iterati
       await runSingleNetworkInboundTest(run, duration, concurrency);
     } else if (testConfig.type === "concurrent-sessions") {
       await runSingleConcurrentSessionsTest(run, maxConcurrency);
+    } else if (testConfig.type === "json") {
+      await runSingleJsonTest(run, iterations);
     }
 
     // Calculate summary
@@ -602,6 +656,16 @@ async function runSingleConcurrentSessionsTest(run, maxConcurrency) {
   run.results.nodejs = await runConcurrentSessionsTest("Node.js", NODEJS_URL, "10s", maxConcurrency);
 }
 
+async function runSingleJsonTest(run, iterations) {
+  run.progressText = "Testing Bun JSON processing...";
+  run.progress = 20;
+  run.results.bun = await runJsonTest("Bun", BUN_URL, iterations);
+
+  run.progressText = "Testing Node.js JSON processing...";
+  run.progress = 60;
+  run.results.nodejs = await runJsonTest("Node.js", NODEJS_URL, iterations);
+}
+
 async function runFullSuite(run, concurrency, iterations, maxConcurrency, suiteDurationMinutes) {
   // Calculate time allocation
   // Total time in seconds
@@ -626,8 +690,8 @@ async function runFullSuite(run, concurrency, iterations, maxConcurrency, suiteD
   console.log(`[Full Suite] Total: ${suiteDurationMinutes}min, Per-test: ${perTestDuration}s, Concurrent target: ${concurrentTarget}`);
 
   run.results = {
-    bun: { throughput: {}, cpu: null, fibonacci: null, networkEgress: null, networkInbound: null, concurrent: null },
-    nodejs: { throughput: {}, cpu: null, fibonacci: null, networkEgress: null, networkInbound: null, concurrent: null }
+    bun: { throughput: {}, cpu: null, fibonacci: null, networkEgress: null, networkInbound: null, concurrent: null, json: null },
+    nodejs: { throughput: {}, cpu: null, fibonacci: null, networkEgress: null, networkInbound: null, concurrent: null, json: null }
   };
 
   // 1. Throughput tests (20%)
@@ -683,14 +747,23 @@ async function runFullSuite(run, concurrency, iterations, maxConcurrency, suiteD
   run.progress = 70;
   run.results.nodejs.fibonacci = await runFibonacciTest("Node.js", NODEJS_URL, 40, 5);
 
-  // 6. Concurrent Sessions tests (90%)
+  // 6. Concurrent Sessions tests (85%)
   run.progressText = "Testing Bun concurrent sessions...";
-  run.progress = 75;
+  run.progress = 72;
   run.results.bun.concurrent = await runConcurrentSessionsTest("Bun", BUN_URL, "10s", concurrentTarget);
 
   run.progressText = "Testing Node.js concurrent sessions...";
-  run.progress = 85;
+  run.progress = 80;
   run.results.nodejs.concurrent = await runConcurrentSessionsTest("Node.js", NODEJS_URL, "10s", concurrentTarget);
+
+  // 7. JSON Processing tests (92%)
+  run.progressText = "Testing Bun JSON processing...";
+  run.progress = 88;
+  run.results.bun.json = await runJsonTest("Bun", BUN_URL, 50);
+
+  run.progressText = "Testing Node.js JSON processing...";
+  run.progress = 92;
+  run.results.nodejs.json = await runJsonTest("Node.js", NODEJS_URL, 50);
 }
 
 function calculateSummary(results, testType) {
@@ -741,6 +814,13 @@ function calculateSummary(results, testType) {
       const nodeMax = results.nodejs.concurrent.max_sustained_concurrency || 0;
       summary.improvements.concurrent = nodeMax > 0 ? (bunMax / nodeMax).toFixed(2) : "N/A";
     }
+
+    // JSON processing improvements
+    if (results.bun?.json && results.nodejs?.json) {
+      const bunMs = parseFloat(results.bun.json.avg_total_ms) || 0;
+      const nodeMs = parseFloat(results.nodejs.json.avg_total_ms) || 0;
+      summary.improvements.json = bunMs > 0 ? (nodeMs / bunMs).toFixed(2) : "N/A";
+    }
   } else if (testType.startsWith("throughput")) {
     const bunRps = results.bun?.requests_per_second || 0;
     const nodeRps = results.nodejs?.requests_per_second || 0;
@@ -781,6 +861,12 @@ function calculateSummary(results, testType) {
     summary.improvements.concurrency = nodeMax > 0 ? (bunMax / nodeMax).toFixed(2) : "N/A";
     summary.bunMaxConcurrency = bunMax;
     summary.nodeMaxConcurrency = nodeMax;
+  } else if (testType === "json-processing") {
+    const bunMs = parseFloat(results.bun?.avg_total_ms) || 0;
+    const nodeMs = parseFloat(results.nodejs?.avg_total_ms) || 0;
+    summary.improvements.json = bunMs > 0 ? (nodeMs / bunMs).toFixed(2) : "N/A";
+    summary.bunMs = bunMs;
+    summary.nodeMs = nodeMs;
   }
 
   return summary;
@@ -940,6 +1026,22 @@ function extractRunDetails(run) {
       testedLevels: nodeResults?.tested_levels?.length || 0,
       recommendation: nodeResults?.recommendation || ""
     };
+  } else if (run.testType === "json-processing") {
+    // JSON processing test details
+    details.bun = {
+      avgTotalMs: bunResults?.avg_total_ms || "0",
+      avgStringifyMs: bunResults?.avg_stringify_ms || "0",
+      avgParseMs: bunResults?.avg_parse_ms || "0",
+      jsonSizeKb: bunResults?.json_size_kb || 0,
+      iterations: bunResults?.iterations || 0
+    };
+    details.nodejs = {
+      avgTotalMs: nodeResults?.avg_total_ms || "0",
+      avgStringifyMs: nodeResults?.avg_stringify_ms || "0",
+      avgParseMs: nodeResults?.avg_parse_ms || "0",
+      jsonSizeKb: nodeResults?.json_size_kb || 0,
+      iterations: nodeResults?.iterations || 0
+    };
   } else if (run.testType === "full-suite") {
     // Full suite - extract key metrics from all test types
     details.bun = {
@@ -949,7 +1051,8 @@ function extractRunDetails(run) {
       fibAvgMs: bunResults?.fibonacci?.avg_duration_ms || 0,
       networkEgressMbps: bunResults?.networkEgress?.throughput_mbps || "0",
       networkInboundMbps: bunResults?.networkInbound?.throughput_mbps || "0",
-      maxConcurrent: bunResults?.concurrent?.max_sustained_concurrency || 0
+      maxConcurrent: bunResults?.concurrent?.max_sustained_concurrency || 0,
+      jsonAvgMs: bunResults?.json?.avg_total_ms || "0"
     };
     details.nodejs = {
       throughputTodos: nodeResults?.throughput?.todos?.requests_per_second || 0,
@@ -958,7 +1061,8 @@ function extractRunDetails(run) {
       fibAvgMs: nodeResults?.fibonacci?.avg_duration_ms || 0,
       networkEgressMbps: nodeResults?.networkEgress?.throughput_mbps || "0",
       networkInboundMbps: nodeResults?.networkInbound?.throughput_mbps || "0",
-      maxConcurrent: nodeResults?.concurrent?.max_sustained_concurrency || 0
+      maxConcurrent: nodeResults?.concurrent?.max_sustained_concurrency || 0,
+      jsonAvgMs: nodeResults?.json?.avg_total_ms || "0"
     };
   }
 
