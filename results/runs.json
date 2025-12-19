@@ -1,0 +1,72 @@
+[
+  {
+    "id": "run-2025-12-18T16-56-29",
+    "testType": "throughput-todos",
+    "testName": "HTTP Throughput (/api/todos)",
+    "startTime": "2025-12-18T16:56:29.798Z",
+    "summary": {
+      "testType": "throughput-todos",
+      "improvements": {
+        "throughput": "3.14"
+      },
+      "bunRps": 22361.4035,
+      "nodeRps": 7120.7202
+    }
+  },
+  {
+    "id": "run-2025-12-18T15-27-09",
+    "testType": "cpu-heavy",
+    "testName": "CPU Heavy (100k Sort)",
+    "startTime": "2025-12-18T15:27:09.997Z",
+    "summary": {
+      "testType": "cpu-heavy",
+      "improvements": {
+        "cpu": "2.06"
+      },
+      "bunMs": 18,
+      "nodeMs": 37
+    }
+  },
+  {
+    "id": "run-2025-12-18T12-12-49",
+    "testType": "fibonacci",
+    "testName": "Fibonacci (n=40)",
+    "startTime": "2025-12-18T12:12:49.463Z",
+    "summary": {
+      "testType": "fibonacci",
+      "improvements": {
+        "fibonacci": "2.50"
+      },
+      "bunMs": 537,
+      "nodeMs": 1342
+    }
+  },
+  {
+    "id": "run-2025-12-18T12-12-26",
+    "testType": "cpu-heavy",
+    "testName": "CPU Heavy (100k Sort)",
+    "startTime": "2025-12-18T12:12:26.534Z",
+    "summary": {
+      "testType": "cpu-heavy",
+      "improvements": {
+        "cpu": "1.94"
+      },
+      "bunMs": 18,
+      "nodeMs": 35
+    }
+  },
+  {
+    "id": "run-2025-12-18T09-57-12",
+    "testType": "cpu-heavy",
+    "testName": "CPU Heavy (100k Sort)",
+    "startTime": "2025-12-18T09:57:12.716Z",
+    "summary": {
+      "testType": "cpu-heavy",
+      "improvements": {
+        "cpu": "1.84"
+      },
+      "bunMs": 19,
+      "nodeMs": 35
+    }
+  }
+]

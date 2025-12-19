@@ -1,0 +1,8 @@
+{
+    "test": "Node.js",
+    "operation": "fibonacci",
+    "n": 40,
+    "iterations": 5,
+    "avg_duration_ms": 1279,
+    "all_durations_ms": [1274,1276,1289,1284,1272]
+}

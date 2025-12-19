@@ -1,0 +1,15 @@
+{
+  "test": "Node.js",
+  "operation": "generate_and_sort_100k_numbers",
+  "iterations": 5,
+  "avg_duration_ms": 35,
+  "min_duration_ms": 30,
+  "max_duration_ms": 42,
+  "all_durations_ms": [
+    31,
+    42,
+    33,
+    30,
+    41
+  ]
+}

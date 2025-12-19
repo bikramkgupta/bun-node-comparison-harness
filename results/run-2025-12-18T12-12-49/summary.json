@@ -1,0 +1,13 @@
+{
+  "id": "run-2025-12-18T12-12-49",
+  "testType": "fibonacci",
+  "startTime": "2025-12-18T12:12:49.463Z",
+  "summary": {
+    "testType": "fibonacci",
+    "improvements": {
+      "fibonacci": "2.50"
+    },
+    "bunMs": 537,
+    "nodeMs": 1342
+  }
+}

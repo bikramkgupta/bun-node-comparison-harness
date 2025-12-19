@@ -1,0 +1,11 @@
+{
+  "test": "Node.js",
+  "endpoint": "/api/health",
+  "duration": "30s",
+  "concurrency": 50,
+  "requests_per_second": 2135.7566,
+  "avg_latency_secs": "0.0234",
+  "p99_latency_secs": "in",
+  "total_requests": 30.0161,
+  "raw_output": "\nSummary:\n  Total:\t30.0161 secs\n  Slowest:\t0.5708 secs\n  Fastest:\t0.0021 secs\n  Average:\t0.0234 secs\n  Requests/sec:\t2135.7566\n  \n  Total data:\t19680849 bytes\n  Size/request:\t307 bytes\n\nResponse time histogram:\n  0.002 [1]\t|\n  0.059 [62887]\t|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■\n  0.116 [1128]\t|■\n  0.173 [61]\t|\n  0.230 [4]\t|\n  0.286 [7]\t|\n  0.343 [2]\t|\n  0.400 [6]\t|\n  0.457 [5]\t|\n  0.514 [4]\t|\n  0.571 [2]\t|\n\n\nLatency distribution:\n  10% in 0.0179 secs\n  25% in 0.0190 secs\n  50% in 0.0204 secs\n  75% in 0.0225 secs\n  90% in 0.0288 secs\n  95% in 0.0456 secs\n  99% in 0.0702 secs\n\nDetails (average, fastest, slowest):\n  DNS+dialup:\t0.0000 secs, 0.0021 secs, 0.5708 secs\n  DNS-lookup:\t0.0000 secs, 0.0000 secs, 0.0011 secs\n  req write:\t0.0000 secs, 0.0000 secs, 0.0036 secs\n  resp wait:\t0.0234 secs, 0.0019 secs, 0.5693 secs\n  resp read:\t0.0000 secs, 0.0000 secs, 0.0087 secs\n\nStatus code distribution:\n  [200]\t64107 responses\n\n\n\n"
+}

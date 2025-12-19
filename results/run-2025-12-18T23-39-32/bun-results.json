@@ -1,0 +1,11 @@
+{
+  "test": "Bun",
+  "endpoint": "/api/todos",
+  "duration": "30s",
+  "concurrency": 50,
+  "requests_per_second": 15202.8392,
+  "avg_latency_secs": "0.0033",
+  "p99_latency_secs": "in",
+  "total_requests": 30.006,
+  "raw_output": "\nSummary:\n  Total:\t30.0060 secs\n  Slowest:\t0.0948 secs\n  Fastest:\t0.0001 secs\n  Average:\t0.0033 secs\n  Requests/sec:\t15202.8392\n  \n  Total data:\t912352 bytes\n  Size/request:\t2 bytes\n\nResponse time histogram:\n  0.000 [1]\t|\n  0.010 [444207]\t|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■\n  0.019 [8129]\t|■\n  0.029 [2299]\t|\n  0.038 [935]\t|\n  0.047 [309]\t|\n  0.057 [98]\t|\n  0.066 [44]\t|\n  0.076 [57]\t|\n  0.085 [86]\t|\n  0.095 [11]\t|\n\n\nLatency distribution:\n  10% in 0.0017 secs\n  25% in 0.0018 secs\n  50% in 0.0022 secs\n  75% in 0.0038 secs\n  90% in 0.0052 secs\n  95% in 0.0065 secs\n  99% in 0.0173 secs\n\nDetails (average, fastest, slowest):\n  DNS+dialup:\t0.0000 secs, 0.0001 secs, 0.0948 secs\n  DNS-lookup:\t0.0000 secs, 0.0000 secs, 0.0024 secs\n  req write:\t0.0000 secs, 0.0000 secs, 0.0147 secs\n  resp wait:\t0.0033 secs, 0.0001 secs, 0.0944 secs\n  resp read:\t0.0000 secs, 0.0000 secs, 0.0488 secs\n\nStatus code distribution:\n  [200]\t456176 responses\n\n\n\n"
+}

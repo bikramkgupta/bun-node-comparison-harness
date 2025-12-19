@@ -1,0 +1,5 @@
+{
+  "duration": "45s",
+  "concurrency": 100,
+  "iterations": 10
+}

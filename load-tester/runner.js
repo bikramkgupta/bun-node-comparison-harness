@@ -34,10 +34,43 @@ function getResultsDir() {
 }
 
 const RESULTS_DIR = getResultsDir();
-const BUN_URL = `http://${process.env.BUN_HOST || "bun-app"}:3000`;
-const NODEJS_URL = `http://${process.env.NODEJS_HOST || "nodejs-app"}:3000`;
+// For App Platform: use full URLs from env vars (e.g., http://bun-service:8080)
+// For Docker Compose: fallback to container names with port 3000
+const BUN_URL = process.env.BUN_URL || `http://${process.env.BUN_HOST || "bun-app"}:3000`;
+const NODEJS_URL = process.env.NODEJS_URL || `http://${process.env.NODEJS_HOST || "nodejs-app"}:3000`;
 
 console.log(`[Storage] Using results directory: ${RESULTS_DIR}`);
+
+// Generate concurrency levels for testing based on max target
+function generateConcurrencyLevels(maxConcurrency) {
+  const levels = [];
+
+  if (maxConcurrency <= 500) {
+    // Low range: 50, 100, 200, 300, 400, 500
+    for (let i = 50; i <= maxConcurrency; i += 50) {
+      if (i <= 100 || i % 100 === 0) levels.push(i);
+    }
+  } else if (maxConcurrency <= 2000) {
+    // Medium range: 100, 250, 500, 750, 1000, 1250, 1500, 1750, 2000
+    levels.push(100, 250, 500);
+    for (let i = 750; i <= maxConcurrency; i += 250) {
+      levels.push(i);
+    }
+  } else {
+    // High range: 100, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000
+    levels.push(100, 500, 1000);
+    for (let i = 1500; i <= maxConcurrency; i += 500) {
+      levels.push(i);
+    }
+  }
+
+  // Ensure max is included
+  if (levels[levels.length - 1] !== maxConcurrency) {
+    levels.push(maxConcurrency);
+  }
+
+  return levels.filter(l => l <= maxConcurrency);
+}
 
 // Store active runs
 const activeRuns = new Map();
@@ -85,6 +118,12 @@ export const TEST_TYPES = {
     endpoint: "/api/network/hold/1000",
     type: "concurrent-sessions",
     description: "Test maximum concurrent connections the server can handle"
+  },
+  "json-processing": {
+    name: "JSON Parse/Serialize",
+    endpoint: "/api/json-benchmark/medium",
+    type: "json",
+    description: "Measure JSON stringify and parse performance"
   },
   "full-suite": {
     name: "Full Benchmark Suite",
@@ -328,12 +367,15 @@ async function runNetworkInboundTest(name, url, duration, concurrency) {
 }
 
 // Run Concurrent Sessions test
-async function runConcurrentSessionsTest(name, url, duration, maxConcurrency = 500) {
+async function runConcurrentSessionsTest(name, url, duration, maxConcurrency = 2000) {
   const endpoint = `/api/network/hold/1000`; // Hold each connection for 1 second
   const fullUrl = `${url}${endpoint}`;
 
-  // Test increasing concurrency levels to find the maximum
-  const concurrencyLevels = [50, 100, 200, 300, 400, 500];
+  // Generate concurrency levels dynamically based on maxConcurrency
+  // For 2000: [100, 250, 500, 750, 1000, 1500, 2000]
+  // For 5000: [100, 500, 1000, 1500, 2000, 3000, 4000, 5000]
+  const concurrencyLevels = generateConcurrencyLevels(maxConcurrency);
+  console.log(`[Concurrent] Testing levels: ${concurrencyLevels.join(', ')} (max: ${maxConcurrency})`);
   const results = [];
 
   for (const concurrency of concurrencyLevels) {
@@ -378,6 +420,14 @@ async function runConcurrentSessionsTest(name, url, duration, maxConcurrency = 5
     ? Math.max(...successfulLevels.map(r => r.concurrency))
     : 0;
 
+  // Generate recommendation based on results
+  const targetReached = maxSustainedConcurrency >= maxConcurrency;
+  const recommendation = targetReached
+    ? `Server handles ${maxConcurrency}+ concurrent connections well`
+    : maxSustainedConcurrency >= 1000
+      ? `Server sustains ${maxSustainedConcurrency} concurrent connections (target: ${maxConcurrency})`
+      : `Server may struggle above ${maxSustainedConcurrency} concurrent connections`;
+
   return {
     test: name,
     endpoint,
@@ -385,9 +435,54 @@ async function runConcurrentSessionsTest(name, url, duration, maxConcurrency = 5
     duration: "10s per level",
     tested_levels: results,
     max_sustained_concurrency: maxSustainedConcurrency,
-    recommendation: maxSustainedConcurrency >= 500
-      ? "Server handles 500+ concurrent connections well"
-      : `Server may struggle above ${maxSustainedConcurrency} concurrent connections`
+    target_concurrency: maxConcurrency,
+    recommendation
+  };
+}
+
+// Run JSON Processing test
+async function runJsonTest(name, url, iterations = 100) {
+  const endpoint = `/api/json-benchmark/medium`;
+  const fullUrl = `${url}${endpoint}`;
+  const results = [];
+
+  for (let i = 0; i < iterations; i++) {
+    try {
+      const response = await fetch(fullUrl);
+      const data = await response.json();
+      results.push({
+        iteration: i + 1,
+        json_kb: parseFloat(data.json_kb),
+        stringify_ms: data.timings_ms.stringify,
+        parse_ms: data.timings_ms.parse,
+        total_ms: data.timings_ms.total
+      });
+    } catch (error) {
+      results.push({ iteration: i + 1, error: error.message });
+    }
+  }
+
+  const successful = results.filter(r => !r.error);
+  const avgStringify = successful.length > 0
+    ? successful.reduce((sum, r) => sum + r.stringify_ms, 0) / successful.length
+    : 0;
+  const avgParse = successful.length > 0
+    ? successful.reduce((sum, r) => sum + r.parse_ms, 0) / successful.length
+    : 0;
+  const avgTotal = successful.length > 0
+    ? successful.reduce((sum, r) => sum + r.total_ms, 0) / successful.length
+    : 0;
+
+  return {
+    test: name,
+    endpoint,
+    type: "json",
+    iterations,
+    successful_iterations: successful.length,
+    avg_stringify_ms: avgStringify.toFixed(3),
+    avg_parse_ms: avgParse.toFixed(3),
+    avg_total_ms: avgTotal.toFixed(3),
+    json_size_kb: successful[0]?.json_kb || 0
   };
 }
 
@@ -415,13 +510,13 @@ export async function checkServicesHealth() {
 // Start a benchmark run
 export async function startBenchmark(testType, config) {
   const runId = generateRunId();
-  const { duration = "30s", concurrency = 50, iterations = 10 } = config;
+  const { duration = "30s", concurrency = 50, iterations = 10, maxConcurrency = 2000, suiteDurationMinutes = 10 } = config;
 
   // Initialize run state
   const run = {
     id: runId,
     testType,
-    config: { duration, concurrency, iterations },
+    config: { duration, concurrency, iterations, maxConcurrency, suiteDurationMinutes },
     status: "running",
     progress: 0,
     progressText: "Initializing...",
@@ -433,13 +528,13 @@ export async function startBenchmark(testType, config) {
   activeRuns.set(runId, run);
 
   // Run benchmark asynchronously
-  runBenchmarkAsync(runId, testType, duration, concurrency, iterations);
+  runBenchmarkAsync(runId, testType, duration, concurrency, iterations, maxConcurrency, suiteDurationMinutes);
 
   return runId;
 }
 
 // Async benchmark execution
-async function runBenchmarkAsync(runId, testType, duration, concurrency, iterations) {
+async function runBenchmarkAsync(runId, testType, duration, concurrency, iterations, maxConcurrency = 2000, suiteDurationMinutes = 10) {
   const run = activeRuns.get(runId);
   if (!run) return;
 
@@ -463,7 +558,7 @@ async function runBenchmarkAsync(runId, testType, duration, concurrency, iterati
     }
 
     if (testType === "full-suite") {
-      await runFullSuite(run, duration, concurrency, iterations);
+      await runFullSuite(run, concurrency, iterations, maxConcurrency, suiteDurationMinutes);
     } else if (testConfig.type === "throughput") {
       await runSingleThroughputTest(run, testConfig.endpoint, duration, concurrency);
     } else if (testConfig.type === "cpu") {
@@ -475,7 +570,9 @@ async function runBenchmarkAsync(runId, testType, duration, concurrency, iterati
     } else if (testConfig.type === "network-inbound") {
       await runSingleNetworkInboundTest(run, duration, concurrency);
     } else if (testConfig.type === "concurrent-sessions") {
-      await runSingleConcurrentSessionsTest(run, concurrency);
+      await runSingleConcurrentSessionsTest(run, maxConcurrency);
+    } else if (testConfig.type === "json") {
+      await runSingleJsonTest(run, iterations);
     }
 
     // Calculate summary
@@ -500,105 +597,226 @@ async function runBenchmarkAsync(runId, testType, duration, concurrency, iterati
 }
 
 async function runSingleThroughputTest(run, endpoint, duration, concurrency) {
-  run.progressText = `Testing Bun ${endpoint}...`;
+  run.progressText = `Testing Bun & Node.js ${endpoint} in parallel...`;
   run.progress = 20;
-  run.results.bun = await runThroughputTest("Bun", BUN_URL, endpoint, duration, concurrency);
 
-  run.progressText = `Testing Node.js ${endpoint}...`;
-  run.progress = 60;
-  run.results.nodejs = await runThroughputTest("Node.js", NODEJS_URL, endpoint, duration, concurrency);
+  const [bunResult, nodeResult] = await Promise.all([
+    runThroughputTest("Bun", BUN_URL, endpoint, duration, concurrency),
+    runThroughputTest("Node.js", NODEJS_URL, endpoint, duration, concurrency)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runSingleCpuTest(run, iterations) {
-  run.progressText = "Testing Bun CPU performance...";
+  run.progressText = "Testing Bun & Node.js CPU performance in parallel...";
   run.progress = 20;
-  run.results.bun = await runCpuTest("Bun", BUN_URL, iterations);
 
-  run.progressText = "Testing Node.js CPU performance...";
-  run.progress = 60;
-  run.results.nodejs = await runCpuTest("Node.js", NODEJS_URL, iterations);
+  const [bunResult, nodeResult] = await Promise.all([
+    runCpuTest("Bun", BUN_URL, iterations),
+    runCpuTest("Node.js", NODEJS_URL, iterations)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runSingleFibonacciTest(run, iterations) {
-  run.progressText = "Testing Bun Fibonacci...";
+  run.progressText = "Testing Bun & Node.js Fibonacci in parallel...";
   run.progress = 20;
-  run.results.bun = await runFibonacciTest("Bun", BUN_URL, 40, iterations);
 
-  run.progressText = "Testing Node.js Fibonacci...";
-  run.progress = 60;
-  run.results.nodejs = await runFibonacciTest("Node.js", NODEJS_URL, 40, iterations);
+  const [bunResult, nodeResult] = await Promise.all([
+    runFibonacciTest("Bun", BUN_URL, 40, iterations),
+    runFibonacciTest("Node.js", NODEJS_URL, 40, iterations)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runSingleNetworkEgressTest(run, duration, concurrency) {
-  run.progressText = "Testing Bun egress throughput (download)...";
+  run.progressText = "Testing Bun & Node.js egress throughput in parallel...";
   run.progress = 20;
-  run.results.bun = await runNetworkEgressTest("Bun", BUN_URL, duration, concurrency);
 
-  run.progressText = "Testing Node.js egress throughput (download)...";
-  run.progress = 60;
-  run.results.nodejs = await runNetworkEgressTest("Node.js", NODEJS_URL, duration, concurrency);
+  const [bunResult, nodeResult] = await Promise.all([
+    runNetworkEgressTest("Bun", BUN_URL, duration, concurrency),
+    runNetworkEgressTest("Node.js", NODEJS_URL, duration, concurrency)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runSingleNetworkInboundTest(run, duration, concurrency) {
-  run.progressText = "Testing Bun inbound throughput (upload)...";
+  run.progressText = "Testing Bun & Node.js inbound throughput in parallel...";
   run.progress = 20;
-  run.results.bun = await runNetworkInboundTest("Bun", BUN_URL, duration, concurrency);
 
-  run.progressText = "Testing Node.js inbound throughput (upload)...";
-  run.progress = 60;
-  run.results.nodejs = await runNetworkInboundTest("Node.js", NODEJS_URL, duration, concurrency);
+  const [bunResult, nodeResult] = await Promise.all([
+    runNetworkInboundTest("Bun", BUN_URL, duration, concurrency),
+    runNetworkInboundTest("Node.js", NODEJS_URL, duration, concurrency)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runSingleConcurrentSessionsTest(run, maxConcurrency) {
-  run.progressText = "Testing Bun max concurrent sessions...";
+  run.progressText = "Testing Bun & Node.js concurrent sessions in parallel...";
   run.progress = 20;
-  run.results.bun = await runConcurrentSessionsTest("Bun", BUN_URL, "10s", maxConcurrency);
 
-  run.progressText = "Testing Node.js max concurrent sessions...";
-  run.progress = 60;
-  run.results.nodejs = await runConcurrentSessionsTest("Node.js", NODEJS_URL, "10s", maxConcurrency);
+  const [bunResult, nodeResult] = await Promise.all([
+    runConcurrentSessionsTest("Bun", BUN_URL, "10s", maxConcurrency),
+    runConcurrentSessionsTest("Node.js", NODEJS_URL, "10s", maxConcurrency)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
-async function runFullSuite(run, duration, concurrency, iterations) {
+async function runSingleJsonTest(run, iterations) {
+  run.progressText = "Testing Bun & Node.js JSON processing in parallel...";
+  run.progress = 20;
+
+  const [bunResult, nodeResult] = await Promise.all([
+    runJsonTest("Bun", BUN_URL, iterations),
+    runJsonTest("Node.js", NODEJS_URL, iterations)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
+}
+
+async function runFullSuite(run, concurrency, iterations, maxConcurrency, suiteDurationMinutes) {
+  // Calculate time allocation
+  // Total time in seconds
+  const totalSeconds = suiteDurationMinutes * 60;
+
+  // Reserve time for quick tests and concurrent sessions
+  // CPU + Fibonacci + JSON: ~30s total (quick tests, run in parallel)
+  // Concurrent sessions: ~2 minutes (120s) for moderate concurrency
+  const quickTestsTime = 30;
+  const concurrentSessionsTime = 120;
+
+  // Duration-based tests: throughput-todos, throughput-health, network-egress, network-inbound
+  // Now running in parallel (Bun + Node simultaneously), so only 4 test phases instead of 8
+  const durationBasedRuns = 4;
+  const remainingTime = totalSeconds - quickTestsTime - concurrentSessionsTime;
+  const perTestDuration = Math.max(30, Math.floor(remainingTime / durationBasedRuns));
+  const testDuration = `${perTestDuration}s`;
+
+  // Concurrent sessions target - scale with available time
+  const concurrentTarget = Math.min(maxConcurrency, suiteDurationMinutes >= 20 ? 2000 : suiteDurationMinutes >= 10 ? 1000 : 500);
+
+  console.log(`[Full Suite] Total: ${suiteDurationMinutes}min, Per-test: ${perTestDuration}s, Concurrent target: ${concurrentTarget} (PARALLEL MODE)`);
+
   run.results = {
-    bun: { throughput: {}, cpu: null, fibonacci: null },
-    nodejs: { throughput: {}, cpu: null, fibonacci: null }
+    bun: { throughput: {}, cpu: null, fibonacci: null, networkEgress: null, networkInbound: null, concurrent: null, json: null },
+    nodejs: { throughput: {}, cpu: null, fibonacci: null, networkEgress: null, networkInbound: null, concurrent: null, json: null }
   };
 
-  // Throughput tests
-  run.progressText = "Testing Bun /api/todos throughput...";
-  run.progress = 10;
-  run.results.bun.throughput.todos = await runThroughputTest("Bun", BUN_URL, "/api/todos", duration, concurrency);
+  // 1. Throughput tests - /api/todos (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js /api/todos throughput in parallel...";
+  run.progress = 5;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runThroughputTest("Bun", BUN_URL, "/api/todos", testDuration, concurrency),
+      runThroughputTest("Node.js", NODEJS_URL, "/api/todos", testDuration, concurrency)
+    ]);
+    run.results.bun.throughput.todos = bunResult;
+    run.results.nodejs.throughput.todos = nodeResult;
+  }
 
-  run.progressText = "Testing Node.js /api/todos throughput...";
-  run.progress = 25;
-  run.results.nodejs.throughput.todos = await runThroughputTest("Node.js", NODEJS_URL, "/api/todos", duration, concurrency);
+  // 2. Throughput tests - /api/health (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js /api/health throughput in parallel...";
+  run.progress = 18;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runThroughputTest("Bun", BUN_URL, "/api/health", testDuration, concurrency),
+      runThroughputTest("Node.js", NODEJS_URL, "/api/health", testDuration, concurrency)
+    ]);
+    run.results.bun.throughput.health = bunResult;
+    run.results.nodejs.throughput.health = nodeResult;
+  }
 
-  run.progressText = "Testing Bun /api/health throughput...";
-  run.progress = 40;
-  run.results.bun.throughput.health = await runThroughputTest("Bun", BUN_URL, "/api/health", duration, concurrency);
+  // 3. Network Egress tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js network egress in parallel...";
+  run.progress = 31;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runNetworkEgressTest("Bun", BUN_URL, testDuration, concurrency),
+      runNetworkEgressTest("Node.js", NODEJS_URL, testDuration, concurrency)
+    ]);
+    run.results.bun.networkEgress = bunResult;
+    run.results.nodejs.networkEgress = nodeResult;
+  }
 
-  run.progressText = "Testing Node.js /api/health throughput...";
-  run.progress = 50;
-  run.results.nodejs.throughput.health = await runThroughputTest("Node.js", NODEJS_URL, "/api/health", duration, concurrency);
+  // 4. Network Inbound tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js network inbound in parallel...";
+  run.progress = 44;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runNetworkInboundTest("Bun", BUN_URL, testDuration, concurrency),
+      runNetworkInboundTest("Node.js", NODEJS_URL, testDuration, concurrency)
+    ]);
+    run.results.bun.networkInbound = bunResult;
+    run.results.nodejs.networkInbound = nodeResult;
+  }
 
-  // CPU tests
-  run.progressText = "Testing Bun CPU performance...";
-  run.progress = 60;
-  run.results.bun.cpu = await runCpuTest("Bun", BUN_URL, iterations);
+  // 5. CPU tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js CPU performance in parallel...";
+  run.progress = 57;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runCpuTest("Bun", BUN_URL, iterations),
+      runCpuTest("Node.js", NODEJS_URL, iterations)
+    ]);
+    run.results.bun.cpu = bunResult;
+    run.results.nodejs.cpu = nodeResult;
+  }
 
-  run.progressText = "Testing Node.js CPU performance...";
-  run.progress = 70;
-  run.results.nodejs.cpu = await runCpuTest("Node.js", NODEJS_URL, iterations);
+  // 6. Fibonacci tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js Fibonacci in parallel...";
+  run.progress = 65;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runFibonacciTest("Bun", BUN_URL, 40, 5),
+      runFibonacciTest("Node.js", NODEJS_URL, 40, 5)
+    ]);
+    run.results.bun.fibonacci = bunResult;
+    run.results.nodejs.fibonacci = nodeResult;
+  }
 
-  // Fibonacci tests
-  run.progressText = "Testing Bun Fibonacci...";
-  run.progress = 80;
-  run.results.bun.fibonacci = await runFibonacciTest("Bun", BUN_URL, 40, 5);
+  // 7. Concurrent Sessions tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js concurrent sessions in parallel...";
+  run.progress = 73;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runConcurrentSessionsTest("Bun", BUN_URL, "10s", concurrentTarget),
+      runConcurrentSessionsTest("Node.js", NODEJS_URL, "10s", concurrentTarget)
+    ]);
+    run.results.bun.concurrent = bunResult;
+    run.results.nodejs.concurrent = nodeResult;
+  }
 
-  run.progressText = "Testing Node.js Fibonacci...";
-  run.progress = 90;
-  run.results.nodejs.fibonacci = await runFibonacciTest("Node.js", NODEJS_URL, 40, 5);
+  // 8. JSON Processing tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js JSON processing in parallel...";
+  run.progress = 88;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runJsonTest("Bun", BUN_URL, 50),
+      runJsonTest("Node.js", NODEJS_URL, 50)
+    ]);
+    run.results.bun.json = bunResult;
+    run.results.nodejs.json = nodeResult;
+  }
 }
 
 function calculateSummary(results, testType) {
@@ -627,6 +845,34 @@ function calculateSummary(results, testType) {
       const bunMs = results.bun.fibonacci.avg_duration_ms;
       const nodeMs = results.nodejs.fibonacci.avg_duration_ms;
       summary.improvements.fibonacci = bunMs > 0 ? (nodeMs / bunMs).toFixed(2) : "N/A";
+    }
+
+    // Network Egress improvements
+    if (results.bun?.networkEgress && results.nodejs?.networkEgress) {
+      const bunMbps = parseFloat(results.bun.networkEgress.throughput_mbps) || 0;
+      const nodeMbps = parseFloat(results.nodejs.networkEgress.throughput_mbps) || 0;
+      summary.improvements.networkEgress = nodeMbps > 0 ? (bunMbps / nodeMbps).toFixed(2) : "N/A";
+    }
+
+    // Network Inbound improvements
+    if (results.bun?.networkInbound && results.nodejs?.networkInbound) {
+      const bunMbps = parseFloat(results.bun.networkInbound.throughput_mbps) || 0;
+      const nodeMbps = parseFloat(results.nodejs.networkInbound.throughput_mbps) || 0;
+      summary.improvements.networkInbound = nodeMbps > 0 ? (bunMbps / nodeMbps).toFixed(2) : "N/A";
+    }
+
+    // Concurrent sessions improvements
+    if (results.bun?.concurrent && results.nodejs?.concurrent) {
+      const bunMax = results.bun.concurrent.max_sustained_concurrency || 0;
+      const nodeMax = results.nodejs.concurrent.max_sustained_concurrency || 0;
+      summary.improvements.concurrent = nodeMax > 0 ? (bunMax / nodeMax).toFixed(2) : "N/A";
+    }
+
+    // JSON processing improvements
+    if (results.bun?.json && results.nodejs?.json) {
+      const bunMs = parseFloat(results.bun.json.avg_total_ms) || 0;
+      const nodeMs = parseFloat(results.nodejs.json.avg_total_ms) || 0;
+      summary.improvements.json = bunMs > 0 ? (nodeMs / bunMs).toFixed(2) : "N/A";
     }
   } else if (testType.startsWith("throughput")) {
     const bunRps = results.bun?.requests_per_second || 0;
@@ -668,6 +914,12 @@ function calculateSummary(results, testType) {
     summary.improvements.concurrency = nodeMax > 0 ? (bunMax / nodeMax).toFixed(2) : "N/A";
     summary.bunMaxConcurrency = bunMax;
     summary.nodeMaxConcurrency = nodeMax;
+  } else if (testType === "json-processing") {
+    const bunMs = parseFloat(results.bun?.avg_total_ms) || 0;
+    const nodeMs = parseFloat(results.nodejs?.avg_total_ms) || 0;
+    summary.improvements.json = bunMs > 0 ? (nodeMs / bunMs).toFixed(2) : "N/A";
+    summary.bunMs = bunMs;
+    summary.nodeMs = nodeMs;
   }
 
   return summary;
@@ -827,17 +1079,43 @@ function extractRunDetails(run) {
       testedLevels: nodeResults?.tested_levels?.length || 0,
       recommendation: nodeResults?.recommendation || ""
     };
+  } else if (run.testType === "json-processing") {
+    // JSON processing test details
+    details.bun = {
+      avgTotalMs: bunResults?.avg_total_ms || "0",
+      avgStringifyMs: bunResults?.avg_stringify_ms || "0",
+      avgParseMs: bunResults?.avg_parse_ms || "0",
+      jsonSizeKb: bunResults?.json_size_kb || 0,
+      iterations: bunResults?.iterations || 0
+    };
+    details.nodejs = {
+      avgTotalMs: nodeResults?.avg_total_ms || "0",
+      avgStringifyMs: nodeResults?.avg_stringify_ms || "0",
+      avgParseMs: nodeResults?.avg_parse_ms || "0",
+      jsonSizeKb: nodeResults?.json_size_kb || 0,
+      iterations: nodeResults?.iterations || 0
+    };
   } else if (run.testType === "full-suite") {
-    // Full suite - extract key metrics
+    // Full suite - extract key metrics from all test types
     details.bun = {
       throughputTodos: bunResults?.throughput?.todos?.requests_per_second || 0,
+      throughputHealth: bunResults?.throughput?.health?.requests_per_second || 0,
       cpuAvgMs: bunResults?.cpu?.avg_duration_ms || 0,
-      fibAvgMs: bunResults?.fibonacci?.avg_duration_ms || 0
+      fibAvgMs: bunResults?.fibonacci?.avg_duration_ms || 0,
+      networkEgressMbps: bunResults?.networkEgress?.throughput_mbps || "0",
+      networkInboundMbps: bunResults?.networkInbound?.throughput_mbps || "0",
+      maxConcurrent: bunResults?.concurrent?.max_sustained_concurrency || 0,
+      jsonAvgMs: bunResults?.json?.avg_total_ms || "0"
     };
     details.nodejs = {
       throughputTodos: nodeResults?.throughput?.todos?.requests_per_second || 0,
+      throughputHealth: nodeResults?.throughput?.health?.requests_per_second || 0,
       cpuAvgMs: nodeResults?.cpu?.avg_duration_ms || 0,
-      fibAvgMs: nodeResults?.fibonacci?.avg_duration_ms || 0
+      fibAvgMs: nodeResults?.fibonacci?.avg_duration_ms || 0,
+      networkEgressMbps: nodeResults?.networkEgress?.throughput_mbps || "0",
+      networkInboundMbps: nodeResults?.networkInbound?.throughput_mbps || "0",
+      maxConcurrent: nodeResults?.concurrent?.max_sustained_concurrency || 0,
+      jsonAvgMs: nodeResults?.json?.avg_total_ms || "0"
     };
   }
 

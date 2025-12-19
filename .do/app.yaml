@@ -1,0 +1,163 @@
+#
+# Bun vs Node.js Benchmark - App Platform Hot Reload Configuration
+#
+# Usage:
+#   doctl apps create --spec .do/app.yaml
+#
+# Three services using pre-built hot reload template images:
+#   - bun-service: Bun runtime Todo app
+#   - nodejs-service: Node.js runtime Todo app
+#   - benchmark-service: Load testing dashboard
+#
+
+name: bun-node-benchmark
+region: syd1
+
+services:
+  # ============================================
+  # Bun Service - Express Todo App on Bun (Internal)
+  # ============================================
+  - name: bun-service
+    image:
+      registry_type: GHCR
+      registry: bikramkgupta
+      repository: hot-reload-bun
+      tag: latest
+
+    instance_count: 1
+    instance_size_slug: apps-d-1vcpu-1gb
+    # Internal service - accessed by benchmark-service via PRIVATE_URL
+    # Port 9090 is for the dev-health-server (health checks during install)
+    internal_ports:
+      - 8080
+      - 9090
+
+    # Use dev-health-server on port 9090 - always running throughout container lifecycle
+    # This ensures health checks pass during bun install (which can take 1-2 min)
+    health_check:
+      http_path: /dev_health
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 6
+      port: 9090
+
+    envs:
+      - key: GITHUB_REPO_URL
+        value: "https://github.com/bikramkgupta/bun-node-comparison-harness"
+        scope: RUN_TIME
+      - key: GITHUB_BRANCH
+        value: "dev"
+        scope: RUN_TIME
+      - key: GITHUB_REPO_FOLDER
+        value: "bun"
+        scope: RUN_TIME
+      - key: DEV_START_COMMAND
+        value: "bash dev_startup.sh"
+        scope: RUN_TIME
+      - key: GITHUB_SYNC_INTERVAL
+        value: "15"
+        scope: RUN_TIME
+
+  # ============================================
+  # Node.js Service - Express Todo App on Node (Internal)
+  # ============================================
+  - name: nodejs-service
+    image:
+      registry_type: GHCR
+      registry: bikramkgupta
+      repository: hot-reload-node
+      tag: latest
+
+    instance_count: 1
+    instance_size_slug: apps-d-1vcpu-1gb
+    # Internal service - accessed by benchmark-service via PRIVATE_URL
+    # Port 9090 is for the dev-health-server (health checks during install)
+    internal_ports:
+      - 8080
+      - 9090
+
+    # Use dev-health-server on port 9090 - always running throughout container lifecycle
+    # This ensures health checks pass during npm install (which can take 1-5 min for 100 packages)
+    health_check:
+      http_path: /dev_health
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 6
+      port: 9090
+
+    envs:
+      - key: GITHUB_REPO_URL
+        value: "https://github.com/bikramkgupta/bun-node-comparison-harness"
+        scope: RUN_TIME
+      - key: GITHUB_BRANCH
+        value: "dev"
+        scope: RUN_TIME
+      - key: GITHUB_REPO_FOLDER
+        value: "nodejs"
+        scope: RUN_TIME
+      - key: DEV_START_COMMAND
+        value: "bash dev_startup.sh"
+        scope: RUN_TIME
+      - key: GITHUB_SYNC_INTERVAL
+        value: "15"
+        scope: RUN_TIME
+
+  # ============================================
+  # Benchmark Service - Load Testing Dashboard
+  # ============================================
+  - name: benchmark-service
+    image:
+      registry_type: GHCR
+      registry: bikramkgupta
+      repository: hot-reload-bun
+      tag: latest
+
+    instance_count: 1
+    instance_size_slug: apps-d-1vcpu-1gb
+    http_port: 8080
+    # Port 9090 is for the dev-health-server (health checks during install)
+    internal_ports:
+      - 9090
+
+    # Use dev-health-server on port 9090 - always running throughout container lifecycle
+    health_check:
+      http_path: /dev_health
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 6
+      port: 9090
+
+    envs:
+      - key: GITHUB_REPO_URL
+        value: "https://github.com/bikramkgupta/bun-node-comparison-harness"
+        scope: RUN_TIME
+      - key: GITHUB_BRANCH
+        value: "dev"
+        scope: RUN_TIME
+      - key: GITHUB_REPO_FOLDER
+        value: "load-tester"
+        scope: RUN_TIME
+      - key: DEV_START_COMMAND
+        value: "bash dev_startup.sh"
+        scope: RUN_TIME
+      - key: GITHUB_SYNC_INTERVAL
+        value: "15"
+        scope: RUN_TIME
+      # NOTE: Removed PRE_DEPLOY_COMMAND - dev_startup.sh handles hey installation with proper Go env
+      # Service discovery - App Platform internal URLs
+      - key: BUN_URL
+        value: "${bun-service.PRIVATE_URL}"
+        scope: RUN_TIME
+      - key: NODEJS_URL
+        value: "${nodejs-service.PRIVATE_URL}"
+        scope: RUN_TIME
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED

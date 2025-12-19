@@ -114,7 +114,7 @@ let nextId = 1;
 // Express App Setup
 // ============================================
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Middleware
 app.use(helmet({
@@ -276,24 +276,11 @@ app.get('/api/fibonacci/:n', (req, res) => {
 // Network Throughput Benchmark Endpoints
 // ============================================
 
-// Pre-generate payload buffers for network tests (avoids CPU overhead during test)
-const PAYLOAD_1KB = Buffer.alloc(1024, 'X');
-const PAYLOAD_CACHE = new Map();
-
-function getPayload(sizeKB) {
-  if (!PAYLOAD_CACHE.has(sizeKB)) {
-    const size = Math.min(sizeKB, 10240); // Cap at 10MB
-    PAYLOAD_CACHE.set(sizeKB, Buffer.alloc(size * 1024, 'X'));
-  }
-  return PAYLOAD_CACHE.get(sizeKB);
-}
-
 // Download endpoint - Test EGRESS throughput
 // Returns a payload of specified size in KB (default 100KB, max 10MB)
 app.get('/api/network/download/:sizeKB?', (req, res) => {
   const sizeKB = Math.min(parseInt(req.params.sizeKB) || 100, 10240);
-  const startTime = Date.now();
-  const payload = getPayload(sizeKB);
+  const payload = Buffer.alloc(sizeKB * 1024, 'X');
 
   res.set({
     'Content-Type': 'application/octet-stream',
@@ -335,6 +322,80 @@ app.get('/api/network/hold/:durationMs?', async (req, res) => {
     runtime_version: RUNTIME_VERSION,
     held_duration_ms: Date.now() - startTime,
     requested_duration_ms: duration
+  });
+});
+
+// ============================================
+// JSON Processing Benchmark Endpoints
+// ============================================
+
+// Generate a complex nested JSON object
+function generateComplexJson(depth = 5, breadth = 10) {
+  if (depth === 0) {
+    return {
+      id: Math.random().toString(36).substring(7),
+      value: Math.random() * 1000,
+      timestamp: Date.now(),
+      tags: Array(5).fill(0).map(() => Math.random().toString(36).substring(7))
+    };
+  }
+
+  const obj = {
+    level: depth,
+    children: []
+  };
+
+  for (let i = 0; i < breadth; i++) {
+    obj.children.push(generateComplexJson(depth - 1, Math.max(2, breadth - 2)));
+  }
+
+  return obj;
+}
+
+// JSON benchmark endpoint
+// Tests: JSON.stringify + JSON.parse performance
+app.get('/api/json-benchmark/:size?', (req, res) => {
+  const size = req.params.size || 'medium'; // small, medium, large
+  const startTime = process.hrtime.bigint();
+
+  // Generate JSON based on size
+  let depth, breadth;
+  switch (size) {
+    case 'small':
+      depth = 3; breadth = 5;
+      break;
+    case 'large':
+      depth = 6; breadth = 15;
+      break;
+    default: // medium
+      depth = 5; breadth = 10;
+  }
+
+  // Generate complex object
+  const obj = generateComplexJson(depth, breadth);
+  const generateTime = process.hrtime.bigint();
+
+  // Stringify
+  const jsonString = JSON.stringify(obj);
+  const stringifyTime = process.hrtime.bigint();
+
+  // Parse back
+  const parsed = JSON.parse(jsonString);
+  const parseTime = process.hrtime.bigint();
+
+  const totalTime = process.hrtime.bigint();
+
+  res.json({
+    runtime: RUNTIME,
+    size,
+    json_bytes: Buffer.byteLength(jsonString),
+    json_kb: (Buffer.byteLength(jsonString) / 1024).toFixed(2),
+    timings_ms: {
+      generate: Number(generateTime - startTime) / 1e6,
+      stringify: Number(stringifyTime - generateTime) / 1e6,
+      parse: Number(parseTime - stringifyTime) / 1e6,
+      total: Number(totalTime - startTime) / 1e6
+    }
   });
 });
 

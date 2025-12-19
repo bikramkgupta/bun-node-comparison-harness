@@ -1,0 +1,13 @@
+{
+  "id": "run-2025-12-18T12-12-26",
+  "testType": "cpu-heavy",
+  "startTime": "2025-12-18T12:12:26.534Z",
+  "summary": {
+    "testType": "cpu-heavy",
+    "improvements": {
+      "cpu": "1.94"
+    },
+    "bunMs": 18,
+    "nodeMs": 35
+  }
+}
