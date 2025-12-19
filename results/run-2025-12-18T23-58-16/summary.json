@@ -1,0 +1,13 @@
+{
+  "id": "run-2025-12-18T23-58-16",
+  "testType": "throughput-health",
+  "startTime": "2025-12-18T23:58:16.125Z",
+  "summary": {
+    "testType": "throughput-health",
+    "improvements": {
+      "throughput": "5.19"
+    },
+    "bunRps": 11076.2417,
+    "nodeRps": 2135.7566
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "test": "Node.js",
+  "operation": "fibonacci",
+  "n": 40,
+  "result": 102334155,
+  "iterations": 10,
+  "avg_duration_ms": 1220,
+  "all_durations_ms": [
+    685,
+    1271,
+    1281,
+    1297,
+    1268,
+    1291,
+    1280,
+    1275,
+    1277,
+    1275
+  ]
+}

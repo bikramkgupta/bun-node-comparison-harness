@@ -1,0 +1,20 @@
+{
+  "test": "Bun",
+  "operation": "generate_and_sort_100k_numbers",
+  "iterations": 10,
+  "avg_duration_ms": 20,
+  "min_duration_ms": 17,
+  "max_duration_ms": 30,
+  "all_durations_ms": [
+    30,
+    21,
+    21,
+    19,
+    19,
+    17,
+    17,
+    20,
+    19,
+    18
+  ]
+}

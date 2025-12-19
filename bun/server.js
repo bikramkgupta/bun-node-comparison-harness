@@ -261,6 +261,72 @@ app.get('/api/fibonacci/:n', (req, res) => {
   });
 });
 
+// ============================================
+// Network Throughput Benchmark Endpoints
+// ============================================
+
+// Pre-generate payload buffers for network tests (avoids CPU overhead during test)
+const PAYLOAD_1KB = Buffer.alloc(1024, 'X');
+const PAYLOAD_CACHE = new Map();
+
+function getPayload(sizeKB) {
+  if (!PAYLOAD_CACHE.has(sizeKB)) {
+    const size = Math.min(sizeKB, 10240); // Cap at 10MB
+    PAYLOAD_CACHE.set(sizeKB, Buffer.alloc(size * 1024, 'X'));
+  }
+  return PAYLOAD_CACHE.get(sizeKB);
+}
+
+// Download endpoint - Test EGRESS throughput
+// Returns a payload of specified size in KB (default 100KB, max 10MB)
+app.get('/api/network/download/:sizeKB?', (req, res) => {
+  const sizeKB = Math.min(parseInt(req.params.sizeKB) || 100, 10240);
+  const startTime = Date.now();
+  const payload = getPayload(sizeKB);
+
+  res.set({
+    'Content-Type': 'application/octet-stream',
+    'Content-Length': payload.length,
+    'X-Payload-Size-KB': sizeKB,
+    'X-Runtime': RUNTIME
+  });
+
+  res.send(payload);
+});
+
+// Upload endpoint - Test INBOUND throughput
+// Accepts any payload and reports size received
+app.post('/api/network/upload', express.raw({ type: '*/*', limit: '50mb' }), (req, res) => {
+  const startTime = Date.now();
+  const bytesReceived = req.body ? req.body.length : 0;
+  const duration = Date.now() - startTime;
+
+  res.json({
+    runtime: RUNTIME,
+    runtime_version: RUNTIME_VERSION,
+    bytes_received: bytesReceived,
+    kb_received: (bytesReceived / 1024).toFixed(2),
+    mb_received: (bytesReceived / (1024 * 1024)).toFixed(4),
+    duration_ms: duration
+  });
+});
+
+// Concurrent connections test endpoint
+// Holds connection open for specified duration to test max concurrent connections
+app.get('/api/network/hold/:durationMs?', async (req, res) => {
+  const duration = Math.min(parseInt(req.params.durationMs) || 1000, 30000); // Max 30s
+  const startTime = Date.now();
+
+  await new Promise(resolve => setTimeout(resolve, duration));
+
+  res.json({
+    runtime: RUNTIME,
+    runtime_version: RUNTIME_VERSION,
+    held_duration_ms: Date.now() - startTime,
+    requested_duration_ms: duration
+  });
+});
+
 // Serve React app for all other routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
