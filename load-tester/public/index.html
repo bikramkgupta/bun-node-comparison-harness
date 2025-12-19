@@ -928,6 +928,9 @@
               <option value="throughput-health">HTTP Throughput (/api/health)</option>
               <option value="cpu-heavy">CPU Heavy (100k Sort)</option>
               <option value="fibonacci">Fibonacci (n=40)</option>
+              <option value="network-egress">Network Egress (Mbps)</option>
+              <option value="network-inbound">Network Inbound (Mbps)</option>
+              <option value="concurrent-sessions">Max Concurrent Sessions</option>
               <option value="full-suite">Full Benchmark Suite</option>
             </select>
           </div>
@@ -1015,7 +1018,7 @@
 
           <div class="improvement-badge" id="improvement-badge">
             <span class="value" id="improvement-value">-</span>
-            <span class="label">faster with Bun</span>
+            <span class="label" id="improvement-label">faster with Bun</span>
           </div>
 
           <!-- Throughput Metrics (hidden for CPU/Fibonacci tests) -->
@@ -1292,6 +1295,27 @@
         bunLabel = 'ms average';
         nodeLabel = 'ms average';
         improvement = data.summary?.improvements?.fibonacci || '-';
+
+      } else if (type === 'network-egress') {
+        bunValue = data.results?.bun?.throughput_mbps || '-';
+        nodeValue = data.results?.nodejs?.throughput_mbps || '-';
+        bunLabel = 'Mbps egress';
+        nodeLabel = 'Mbps egress';
+        improvement = data.summary?.improvements?.egress || '-';
+
+      } else if (type === 'network-inbound') {
+        bunValue = data.results?.bun?.throughput_mbps || '-';
+        nodeValue = data.results?.nodejs?.throughput_mbps || '-';
+        bunLabel = 'Mbps inbound';
+        nodeLabel = 'Mbps inbound';
+        improvement = data.summary?.improvements?.inbound || '-';
+
+      } else if (type === 'concurrent-sessions') {
+        bunValue = data.results?.bun?.max_sustained_concurrency || '-';
+        nodeValue = data.results?.nodejs?.max_sustained_concurrency || '-';
+        bunLabel = 'max concurrent';
+        nodeLabel = 'max concurrent';
+        improvement = data.summary?.improvements?.concurrency || '-';
       }
 
       // Update values with counter animation
@@ -1319,9 +1343,20 @@
       // Update improvement badge
       document.getElementById('improvement-value').textContent = `${improvement}x`;
 
-      // Update throughput metrics (only for throughput tests)
+      // Update improvement label based on test type
+      let improvementLabel = 'faster with Bun';
+      if (type === 'network-egress' || type === 'network-inbound') {
+        improvementLabel = 'higher throughput with Bun';
+      } else if (type === 'concurrent-sessions') {
+        improvementLabel = 'more concurrent sessions with Bun';
+      } else if (type === 'cpu-heavy' || type === 'fibonacci') {
+        improvementLabel = 'faster with Bun';
+      }
+      document.getElementById('improvement-label').textContent = improvementLabel;
+
+      // Update throughput metrics (for throughput and network tests)
       const throughputMetrics = document.getElementById('throughput-metrics');
-      if (type.startsWith('throughput') || type === 'full-suite') {
+      if (type.startsWith('throughput') || type === 'full-suite' || type.startsWith('network-')) {
         throughputMetrics.classList.add('active');
 
         // Get the correct results based on test type
@@ -1342,9 +1377,20 @@
         document.getElementById('bun-p99').textContent = formatLatency(bunResults?.p99_latency_secs);
         document.getElementById('nodejs-p99').textContent = formatLatency(nodeResults?.p99_latency_secs);
 
-        // Populate total requests
-        document.getElementById('bun-total').textContent = formatNumber(bunResults?.total_requests);
-        document.getElementById('nodejs-total').textContent = formatNumber(nodeResults?.total_requests);
+        // Populate total requests or total data
+        if (type === 'network-egress') {
+          document.getElementById('bun-total').textContent = (bunResults?.total_mb || '-') + ' MB';
+          document.getElementById('nodejs-total').textContent = (nodeResults?.total_mb || '-') + ' MB';
+        } else if (type === 'network-inbound') {
+          document.getElementById('bun-total').textContent = (bunResults?.total_uploaded_mb || '-') + ' MB';
+          document.getElementById('nodejs-total').textContent = (nodeResults?.total_uploaded_mb || '-') + ' MB';
+        } else {
+          document.getElementById('bun-total').textContent = formatNumber(bunResults?.total_requests);
+          document.getElementById('nodejs-total').textContent = formatNumber(nodeResults?.total_requests);
+        }
+      } else if (type === 'concurrent-sessions') {
+        // Hide throughput metrics for concurrent sessions test
+        throughputMetrics.classList.remove('active');
       } else {
         throughputMetrics.classList.remove('active');
       }
@@ -1571,6 +1617,104 @@
           <div class="report-details-row">
             <span class="report-details-label">Iterations</span>
             <span class="report-details-value">${details.nodejs?.iterations || '-'}</span>
+          </div>
+        `;
+      } else if (testType === 'network-egress') {
+        // Network egress details
+        bunRows = `
+          <div class="report-details-row">
+            <span class="report-details-label">Throughput</span>
+            <span class="report-details-value">${details.bun?.throughputMbps || '-'} Mbps</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">RPS</span>
+            <span class="report-details-value">${formatNumber(details.bun?.rps)}</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Total Downloaded</span>
+            <span class="report-details-value">${details.bun?.totalMb || '-'} MB</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Avg Latency</span>
+            <span class="report-details-value">${formatLatencyValue(details.bun?.avgLatency)}</span>
+          </div>
+        `;
+        nodeRows = `
+          <div class="report-details-row">
+            <span class="report-details-label">Throughput</span>
+            <span class="report-details-value">${details.nodejs?.throughputMbps || '-'} Mbps</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">RPS</span>
+            <span class="report-details-value">${formatNumber(details.nodejs?.rps)}</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Total Downloaded</span>
+            <span class="report-details-value">${details.nodejs?.totalMb || '-'} MB</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Avg Latency</span>
+            <span class="report-details-value">${formatLatencyValue(details.nodejs?.avgLatency)}</span>
+          </div>
+        `;
+      } else if (testType === 'network-inbound') {
+        // Network inbound details
+        bunRows = `
+          <div class="report-details-row">
+            <span class="report-details-label">Throughput</span>
+            <span class="report-details-value">${details.bun?.throughputMbps || '-'} Mbps</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">RPS</span>
+            <span class="report-details-value">${formatNumber(details.bun?.rps)}</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Total Uploaded</span>
+            <span class="report-details-value">${details.bun?.totalUploadedMb || '-'} MB</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Avg Latency</span>
+            <span class="report-details-value">${formatLatencyValue(details.bun?.avgLatency)}</span>
+          </div>
+        `;
+        nodeRows = `
+          <div class="report-details-row">
+            <span class="report-details-label">Throughput</span>
+            <span class="report-details-value">${details.nodejs?.throughputMbps || '-'} Mbps</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">RPS</span>
+            <span class="report-details-value">${formatNumber(details.nodejs?.rps)}</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Total Uploaded</span>
+            <span class="report-details-value">${details.nodejs?.totalUploadedMb || '-'} MB</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Avg Latency</span>
+            <span class="report-details-value">${formatLatencyValue(details.nodejs?.avgLatency)}</span>
+          </div>
+        `;
+      } else if (testType === 'concurrent-sessions') {
+        // Concurrent sessions details
+        bunRows = `
+          <div class="report-details-row">
+            <span class="report-details-label">Max Concurrent</span>
+            <span class="report-details-value">${details.bun?.maxConcurrency || '-'}</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Levels Tested</span>
+            <span class="report-details-value">${details.bun?.testedLevels || '-'}</span>
+          </div>
+        `;
+        nodeRows = `
+          <div class="report-details-row">
+            <span class="report-details-label">Max Concurrent</span>
+            <span class="report-details-value">${details.nodejs?.maxConcurrency || '-'}</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Levels Tested</span>
+            <span class="report-details-value">${details.nodejs?.testedLevels || '-'}</span>
           </div>
         `;
       } else if (testType === 'full-suite') {
