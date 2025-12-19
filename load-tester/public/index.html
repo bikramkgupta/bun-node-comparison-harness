@@ -936,11 +936,22 @@
           </div>
 
           <div class="form-group" id="duration-group">
-            <label for="duration">Duration</label>
+            <label for="duration">Duration (per test)</label>
             <div class="slider-container">
               <input type="range" id="duration" name="duration" min="10" max="300" value="30">
               <span class="slider-value" id="duration-value">30s</span>
             </div>
+          </div>
+
+          <div class="form-group" id="suite-duration-group" style="display: none;">
+            <label for="suite-duration">Total Suite Duration</label>
+            <div class="slider-container">
+              <input type="range" id="suite-duration" name="suiteDuration" min="5" max="30" value="10">
+              <span class="slider-value" id="suite-duration-value">10 min</span>
+            </div>
+            <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 0.5rem; display: block;">
+              Runs all 7 test types. Time is distributed across tests. Ideal for CPU/memory monitoring.
+            </small>
           </div>
 
           <div class="form-group" id="concurrency-group">
@@ -1095,6 +1106,7 @@
     const form = document.getElementById('benchmark-form');
     const testType = document.getElementById('test-type');
     const duration = document.getElementById('duration');
+    const suiteDuration = document.getElementById('suite-duration');
     const concurrency = document.getElementById('concurrency');
     const iterations = document.getElementById('iterations');
     const maxConcurrency = document.getElementById('max-concurrency');
@@ -1148,6 +1160,10 @@
         document.getElementById('duration-value').textContent = `${duration.value}s`;
       });
 
+      suiteDuration.addEventListener('input', () => {
+        document.getElementById('suite-duration-value').textContent = `${suiteDuration.value} min`;
+      });
+
       concurrency.addEventListener('input', () => {
         document.getElementById('concurrency-value').textContent = concurrency.value;
       });
@@ -1166,22 +1182,32 @@
       testType.addEventListener('change', () => {
         const type = testType.value;
         const durationGroup = document.getElementById('duration-group');
+        const suiteDurationGroup = document.getElementById('suite-duration-group');
         const concurrencyGroup = document.getElementById('concurrency-group');
         const iterationsGroup = document.getElementById('iterations-group');
         const maxConcurrencyGroup = document.getElementById('max-concurrency-group');
 
         if (type === 'cpu-heavy' || type === 'fibonacci') {
           durationGroup.style.display = 'none';
+          suiteDurationGroup.style.display = 'none';
           concurrencyGroup.style.display = 'none';
           iterationsGroup.style.display = 'block';
           maxConcurrencyGroup.style.display = 'none';
         } else if (type === 'concurrent-sessions') {
           durationGroup.style.display = 'none';
+          suiteDurationGroup.style.display = 'none';
           concurrencyGroup.style.display = 'none';
           iterationsGroup.style.display = 'none';
           maxConcurrencyGroup.style.display = 'block';
+        } else if (type === 'full-suite') {
+          durationGroup.style.display = 'none';
+          suiteDurationGroup.style.display = 'block';
+          concurrencyGroup.style.display = 'block';
+          iterationsGroup.style.display = 'none';
+          maxConcurrencyGroup.style.display = 'none';
         } else {
           durationGroup.style.display = 'block';
+          suiteDurationGroup.style.display = 'none';
           concurrencyGroup.style.display = 'block';
           iterationsGroup.style.display = 'none';
           maxConcurrencyGroup.style.display = 'none';
@@ -1197,6 +1223,7 @@
       const config = {
         testType: type,
         duration: `${duration.value}s`,
+        suiteDurationMinutes: parseInt(suiteDuration.value),
         concurrency: parseInt(concurrency.value),
         iterations: parseInt(iterations.value),
         maxConcurrency: parseInt(maxConcurrency.value)
@@ -1752,11 +1779,15 @@
           </div>
         `;
       } else if (testType === 'full-suite') {
-        // Full suite details
+        // Full suite details - all 7 test types
         bunRows = `
           <div class="report-details-row">
-            <span class="report-details-label">Throughput RPS</span>
-            <span class="report-details-value">${formatNumber(details.bun?.throughputTodos)}</span>
+            <span class="report-details-label">Throughput (todos)</span>
+            <span class="report-details-value">${formatNumber(details.bun?.throughputTodos)} RPS</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Throughput (health)</span>
+            <span class="report-details-value">${formatNumber(details.bun?.throughputHealth)} RPS</span>
           </div>
           <div class="report-details-row">
             <span class="report-details-label">CPU Avg</span>
@@ -1766,11 +1797,27 @@
             <span class="report-details-label">Fibonacci Avg</span>
             <span class="report-details-value">${details.bun?.fibAvgMs || '-'}ms</span>
           </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Network Egress</span>
+            <span class="report-details-value">${details.bun?.networkEgressMbps || '-'} Mbps</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Network Inbound</span>
+            <span class="report-details-value">${details.bun?.networkInboundMbps || '-'} Mbps</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Max Concurrent</span>
+            <span class="report-details-value">${details.bun?.maxConcurrent || '-'}</span>
+          </div>
         `;
         nodeRows = `
           <div class="report-details-row">
-            <span class="report-details-label">Throughput RPS</span>
-            <span class="report-details-value">${formatNumber(details.nodejs?.throughputTodos)}</span>
+            <span class="report-details-label">Throughput (todos)</span>
+            <span class="report-details-value">${formatNumber(details.nodejs?.throughputTodos)} RPS</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Throughput (health)</span>
+            <span class="report-details-value">${formatNumber(details.nodejs?.throughputHealth)} RPS</span>
           </div>
           <div class="report-details-row">
             <span class="report-details-label">CPU Avg</span>
@@ -1780,15 +1827,28 @@
             <span class="report-details-label">Fibonacci Avg</span>
             <span class="report-details-value">${details.nodejs?.fibAvgMs || '-'}ms</span>
           </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Network Egress</span>
+            <span class="report-details-value">${details.nodejs?.networkEgressMbps || '-'} Mbps</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Network Inbound</span>
+            <span class="report-details-value">${details.nodejs?.networkInboundMbps || '-'} Mbps</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Max Concurrent</span>
+            <span class="report-details-value">${details.nodejs?.maxConcurrent || '-'}</span>
+          </div>
         `;
       }
 
       // Build config section
       let configHtml = '';
-      if (config.duration || config.concurrency || config.iterations || config.maxConcurrency) {
+      if (config.duration || config.concurrency || config.iterations || config.maxConcurrency || config.suiteDurationMinutes) {
         configHtml = `
           <div class="report-config">
-            ${config.duration ? `<span class="report-config-item">Duration: <span>${config.duration}</span></span>` : ''}
+            ${config.suiteDurationMinutes ? `<span class="report-config-item">Total Duration: <span>${config.suiteDurationMinutes} min</span></span>` : ''}
+            ${config.duration && !config.suiteDurationMinutes ? `<span class="report-config-item">Duration: <span>${config.duration}</span></span>` : ''}
             ${config.concurrency ? `<span class="report-config-item">Concurrency: <span>${config.concurrency}</span></span>` : ''}
             ${config.iterations ? `<span class="report-config-item">Iterations: <span>${config.iterations}</span></span>` : ''}
             ${config.maxConcurrency ? `<span class="report-config-item">Max Connections: <span>${config.maxConcurrency}</span></span>` : ''}

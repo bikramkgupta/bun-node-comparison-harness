@@ -458,13 +458,13 @@ export async function checkServicesHealth() {
 // Start a benchmark run
 export async function startBenchmark(testType, config) {
   const runId = generateRunId();
-  const { duration = "30s", concurrency = 50, iterations = 10, maxConcurrency = 2000 } = config;
+  const { duration = "30s", concurrency = 50, iterations = 10, maxConcurrency = 2000, suiteDurationMinutes = 10 } = config;
 
   // Initialize run state
   const run = {
     id: runId,
     testType,
-    config: { duration, concurrency, iterations, maxConcurrency },
+    config: { duration, concurrency, iterations, maxConcurrency, suiteDurationMinutes },
     status: "running",
     progress: 0,
     progressText: "Initializing...",
@@ -476,13 +476,13 @@ export async function startBenchmark(testType, config) {
   activeRuns.set(runId, run);
 
   // Run benchmark asynchronously
-  runBenchmarkAsync(runId, testType, duration, concurrency, iterations, maxConcurrency);
+  runBenchmarkAsync(runId, testType, duration, concurrency, iterations, maxConcurrency, suiteDurationMinutes);
 
   return runId;
 }
 
 // Async benchmark execution
-async function runBenchmarkAsync(runId, testType, duration, concurrency, iterations, maxConcurrency = 2000) {
+async function runBenchmarkAsync(runId, testType, duration, concurrency, iterations, maxConcurrency = 2000, suiteDurationMinutes = 10) {
   const run = activeRuns.get(runId);
   if (!run) return;
 
@@ -506,7 +506,7 @@ async function runBenchmarkAsync(runId, testType, duration, concurrency, iterati
     }
 
     if (testType === "full-suite") {
-      await runFullSuite(run, duration, concurrency, iterations);
+      await runFullSuite(run, concurrency, iterations, maxConcurrency, suiteDurationMinutes);
     } else if (testConfig.type === "throughput") {
       await runSingleThroughputTest(run, testConfig.endpoint, duration, concurrency);
     } else if (testConfig.type === "cpu") {
@@ -602,46 +602,95 @@ async function runSingleConcurrentSessionsTest(run, maxConcurrency) {
   run.results.nodejs = await runConcurrentSessionsTest("Node.js", NODEJS_URL, "10s", maxConcurrency);
 }
 
-async function runFullSuite(run, duration, concurrency, iterations) {
+async function runFullSuite(run, concurrency, iterations, maxConcurrency, suiteDurationMinutes) {
+  // Calculate time allocation
+  // Total time in seconds
+  const totalSeconds = suiteDurationMinutes * 60;
+
+  // Reserve time for quick tests and concurrent sessions
+  // CPU + Fibonacci: ~30s total (quick tests)
+  // Concurrent sessions: ~2 minutes (120s) for moderate concurrency
+  const quickTestsTime = 30;
+  const concurrentSessionsTime = 120;
+
+  // Duration-based tests: throughput-todos, throughput-health, network-egress, network-inbound
+  // Each runs on both runtimes = 8 total runs
+  const durationBasedRuns = 8;
+  const remainingTime = totalSeconds - quickTestsTime - concurrentSessionsTime;
+  const perTestDuration = Math.max(30, Math.floor(remainingTime / durationBasedRuns));
+  const testDuration = `${perTestDuration}s`;
+
+  // Concurrent sessions target - scale with available time
+  const concurrentTarget = Math.min(maxConcurrency, suiteDurationMinutes >= 20 ? 2000 : suiteDurationMinutes >= 10 ? 1000 : 500);
+
+  console.log(`[Full Suite] Total: ${suiteDurationMinutes}min, Per-test: ${perTestDuration}s, Concurrent target: ${concurrentTarget}`);
+
   run.results = {
-    bun: { throughput: {}, cpu: null, fibonacci: null },
-    nodejs: { throughput: {}, cpu: null, fibonacci: null }
+    bun: { throughput: {}, cpu: null, fibonacci: null, networkEgress: null, networkInbound: null, concurrent: null },
+    nodejs: { throughput: {}, cpu: null, fibonacci: null, networkEgress: null, networkInbound: null, concurrent: null }
   };
 
-  // Throughput tests
+  // 1. Throughput tests (20%)
   run.progressText = "Testing Bun /api/todos throughput...";
-  run.progress = 10;
-  run.results.bun.throughput.todos = await runThroughputTest("Bun", BUN_URL, "/api/todos", duration, concurrency);
+  run.progress = 5;
+  run.results.bun.throughput.todos = await runThroughputTest("Bun", BUN_URL, "/api/todos", testDuration, concurrency);
 
   run.progressText = "Testing Node.js /api/todos throughput...";
-  run.progress = 25;
-  run.results.nodejs.throughput.todos = await runThroughputTest("Node.js", NODEJS_URL, "/api/todos", duration, concurrency);
+  run.progress = 10;
+  run.results.nodejs.throughput.todos = await runThroughputTest("Node.js", NODEJS_URL, "/api/todos", testDuration, concurrency);
 
   run.progressText = "Testing Bun /api/health throughput...";
-  run.progress = 40;
-  run.results.bun.throughput.health = await runThroughputTest("Bun", BUN_URL, "/api/health", duration, concurrency);
+  run.progress = 15;
+  run.results.bun.throughput.health = await runThroughputTest("Bun", BUN_URL, "/api/health", testDuration, concurrency);
 
   run.progressText = "Testing Node.js /api/health throughput...";
-  run.progress = 50;
-  run.results.nodejs.throughput.health = await runThroughputTest("Node.js", NODEJS_URL, "/api/health", duration, concurrency);
+  run.progress = 20;
+  run.results.nodejs.throughput.health = await runThroughputTest("Node.js", NODEJS_URL, "/api/health", testDuration, concurrency);
 
-  // CPU tests
+  // 2. Network Egress tests (35%)
+  run.progressText = "Testing Bun network egress (download)...";
+  run.progress = 25;
+  run.results.bun.networkEgress = await runNetworkEgressTest("Bun", BUN_URL, testDuration, concurrency);
+
+  run.progressText = "Testing Node.js network egress (download)...";
+  run.progress = 35;
+  run.results.nodejs.networkEgress = await runNetworkEgressTest("Node.js", NODEJS_URL, testDuration, concurrency);
+
+  // 3. Network Inbound tests (50%)
+  run.progressText = "Testing Bun network inbound (upload)...";
+  run.progress = 42;
+  run.results.bun.networkInbound = await runNetworkInboundTest("Bun", BUN_URL, testDuration, concurrency);
+
+  run.progressText = "Testing Node.js network inbound (upload)...";
+  run.progress = 50;
+  run.results.nodejs.networkInbound = await runNetworkInboundTest("Node.js", NODEJS_URL, testDuration, concurrency);
+
+  // 4. CPU tests (60%)
   run.progressText = "Testing Bun CPU performance...";
-  run.progress = 60;
+  run.progress = 55;
   run.results.bun.cpu = await runCpuTest("Bun", BUN_URL, iterations);
 
   run.progressText = "Testing Node.js CPU performance...";
-  run.progress = 70;
+  run.progress = 60;
   run.results.nodejs.cpu = await runCpuTest("Node.js", NODEJS_URL, iterations);
 
-  // Fibonacci tests
+  // 5. Fibonacci tests (70%)
   run.progressText = "Testing Bun Fibonacci...";
-  run.progress = 80;
+  run.progress = 65;
   run.results.bun.fibonacci = await runFibonacciTest("Bun", BUN_URL, 40, 5);
 
   run.progressText = "Testing Node.js Fibonacci...";
-  run.progress = 90;
+  run.progress = 70;
   run.results.nodejs.fibonacci = await runFibonacciTest("Node.js", NODEJS_URL, 40, 5);
+
+  // 6. Concurrent Sessions tests (90%)
+  run.progressText = "Testing Bun concurrent sessions...";
+  run.progress = 75;
+  run.results.bun.concurrent = await runConcurrentSessionsTest("Bun", BUN_URL, "10s", concurrentTarget);
+
+  run.progressText = "Testing Node.js concurrent sessions...";
+  run.progress = 85;
+  run.results.nodejs.concurrent = await runConcurrentSessionsTest("Node.js", NODEJS_URL, "10s", concurrentTarget);
 }
 
 function calculateSummary(results, testType) {
@@ -670,6 +719,27 @@ function calculateSummary(results, testType) {
       const bunMs = results.bun.fibonacci.avg_duration_ms;
       const nodeMs = results.nodejs.fibonacci.avg_duration_ms;
       summary.improvements.fibonacci = bunMs > 0 ? (nodeMs / bunMs).toFixed(2) : "N/A";
+    }
+
+    // Network Egress improvements
+    if (results.bun?.networkEgress && results.nodejs?.networkEgress) {
+      const bunMbps = parseFloat(results.bun.networkEgress.throughput_mbps) || 0;
+      const nodeMbps = parseFloat(results.nodejs.networkEgress.throughput_mbps) || 0;
+      summary.improvements.networkEgress = nodeMbps > 0 ? (bunMbps / nodeMbps).toFixed(2) : "N/A";
+    }
+
+    // Network Inbound improvements
+    if (results.bun?.networkInbound && results.nodejs?.networkInbound) {
+      const bunMbps = parseFloat(results.bun.networkInbound.throughput_mbps) || 0;
+      const nodeMbps = parseFloat(results.nodejs.networkInbound.throughput_mbps) || 0;
+      summary.improvements.networkInbound = nodeMbps > 0 ? (bunMbps / nodeMbps).toFixed(2) : "N/A";
+    }
+
+    // Concurrent sessions improvements
+    if (results.bun?.concurrent && results.nodejs?.concurrent) {
+      const bunMax = results.bun.concurrent.max_sustained_concurrency || 0;
+      const nodeMax = results.nodejs.concurrent.max_sustained_concurrency || 0;
+      summary.improvements.concurrent = nodeMax > 0 ? (bunMax / nodeMax).toFixed(2) : "N/A";
     }
   } else if (testType.startsWith("throughput")) {
     const bunRps = results.bun?.requests_per_second || 0;
@@ -871,16 +941,24 @@ function extractRunDetails(run) {
       recommendation: nodeResults?.recommendation || ""
     };
   } else if (run.testType === "full-suite") {
-    // Full suite - extract key metrics
+    // Full suite - extract key metrics from all test types
     details.bun = {
       throughputTodos: bunResults?.throughput?.todos?.requests_per_second || 0,
+      throughputHealth: bunResults?.throughput?.health?.requests_per_second || 0,
       cpuAvgMs: bunResults?.cpu?.avg_duration_ms || 0,
-      fibAvgMs: bunResults?.fibonacci?.avg_duration_ms || 0
+      fibAvgMs: bunResults?.fibonacci?.avg_duration_ms || 0,
+      networkEgressMbps: bunResults?.networkEgress?.throughput_mbps || "0",
+      networkInboundMbps: bunResults?.networkInbound?.throughput_mbps || "0",
+      maxConcurrent: bunResults?.concurrent?.max_sustained_concurrency || 0
     };
     details.nodejs = {
       throughputTodos: nodeResults?.throughput?.todos?.requests_per_second || 0,
+      throughputHealth: nodeResults?.throughput?.health?.requests_per_second || 0,
       cpuAvgMs: nodeResults?.cpu?.avg_duration_ms || 0,
-      fibAvgMs: nodeResults?.fibonacci?.avg_duration_ms || 0
+      fibAvgMs: nodeResults?.fibonacci?.avg_duration_ms || 0,
+      networkEgressMbps: nodeResults?.networkEgress?.throughput_mbps || "0",
+      networkInboundMbps: nodeResults?.networkInbound?.throughput_mbps || "0",
+      maxConcurrent: nodeResults?.concurrent?.max_sustained_concurrency || 0
     };
   }
 
