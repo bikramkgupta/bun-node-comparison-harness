@@ -597,73 +597,101 @@ async function runBenchmarkAsync(runId, testType, duration, concurrency, iterati
 }
 
 async function runSingleThroughputTest(run, endpoint, duration, concurrency) {
-  run.progressText = `Testing Bun ${endpoint}...`;
+  run.progressText = `Testing Bun & Node.js ${endpoint} in parallel...`;
   run.progress = 20;
-  run.results.bun = await runThroughputTest("Bun", BUN_URL, endpoint, duration, concurrency);
 
-  run.progressText = `Testing Node.js ${endpoint}...`;
-  run.progress = 60;
-  run.results.nodejs = await runThroughputTest("Node.js", NODEJS_URL, endpoint, duration, concurrency);
+  const [bunResult, nodeResult] = await Promise.all([
+    runThroughputTest("Bun", BUN_URL, endpoint, duration, concurrency),
+    runThroughputTest("Node.js", NODEJS_URL, endpoint, duration, concurrency)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runSingleCpuTest(run, iterations) {
-  run.progressText = "Testing Bun CPU performance...";
+  run.progressText = "Testing Bun & Node.js CPU performance in parallel...";
   run.progress = 20;
-  run.results.bun = await runCpuTest("Bun", BUN_URL, iterations);
 
-  run.progressText = "Testing Node.js CPU performance...";
-  run.progress = 60;
-  run.results.nodejs = await runCpuTest("Node.js", NODEJS_URL, iterations);
+  const [bunResult, nodeResult] = await Promise.all([
+    runCpuTest("Bun", BUN_URL, iterations),
+    runCpuTest("Node.js", NODEJS_URL, iterations)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runSingleFibonacciTest(run, iterations) {
-  run.progressText = "Testing Bun Fibonacci...";
+  run.progressText = "Testing Bun & Node.js Fibonacci in parallel...";
   run.progress = 20;
-  run.results.bun = await runFibonacciTest("Bun", BUN_URL, 40, iterations);
 
-  run.progressText = "Testing Node.js Fibonacci...";
-  run.progress = 60;
-  run.results.nodejs = await runFibonacciTest("Node.js", NODEJS_URL, 40, iterations);
+  const [bunResult, nodeResult] = await Promise.all([
+    runFibonacciTest("Bun", BUN_URL, 40, iterations),
+    runFibonacciTest("Node.js", NODEJS_URL, 40, iterations)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runSingleNetworkEgressTest(run, duration, concurrency) {
-  run.progressText = "Testing Bun egress throughput (download)...";
+  run.progressText = "Testing Bun & Node.js egress throughput in parallel...";
   run.progress = 20;
-  run.results.bun = await runNetworkEgressTest("Bun", BUN_URL, duration, concurrency);
 
-  run.progressText = "Testing Node.js egress throughput (download)...";
-  run.progress = 60;
-  run.results.nodejs = await runNetworkEgressTest("Node.js", NODEJS_URL, duration, concurrency);
+  const [bunResult, nodeResult] = await Promise.all([
+    runNetworkEgressTest("Bun", BUN_URL, duration, concurrency),
+    runNetworkEgressTest("Node.js", NODEJS_URL, duration, concurrency)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runSingleNetworkInboundTest(run, duration, concurrency) {
-  run.progressText = "Testing Bun inbound throughput (upload)...";
+  run.progressText = "Testing Bun & Node.js inbound throughput in parallel...";
   run.progress = 20;
-  run.results.bun = await runNetworkInboundTest("Bun", BUN_URL, duration, concurrency);
 
-  run.progressText = "Testing Node.js inbound throughput (upload)...";
-  run.progress = 60;
-  run.results.nodejs = await runNetworkInboundTest("Node.js", NODEJS_URL, duration, concurrency);
+  const [bunResult, nodeResult] = await Promise.all([
+    runNetworkInboundTest("Bun", BUN_URL, duration, concurrency),
+    runNetworkInboundTest("Node.js", NODEJS_URL, duration, concurrency)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runSingleConcurrentSessionsTest(run, maxConcurrency) {
-  run.progressText = "Testing Bun max concurrent sessions...";
+  run.progressText = "Testing Bun & Node.js concurrent sessions in parallel...";
   run.progress = 20;
-  run.results.bun = await runConcurrentSessionsTest("Bun", BUN_URL, "10s", maxConcurrency);
 
-  run.progressText = "Testing Node.js max concurrent sessions...";
-  run.progress = 60;
-  run.results.nodejs = await runConcurrentSessionsTest("Node.js", NODEJS_URL, "10s", maxConcurrency);
+  const [bunResult, nodeResult] = await Promise.all([
+    runConcurrentSessionsTest("Bun", BUN_URL, "10s", maxConcurrency),
+    runConcurrentSessionsTest("Node.js", NODEJS_URL, "10s", maxConcurrency)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runSingleJsonTest(run, iterations) {
-  run.progressText = "Testing Bun JSON processing...";
+  run.progressText = "Testing Bun & Node.js JSON processing in parallel...";
   run.progress = 20;
-  run.results.bun = await runJsonTest("Bun", BUN_URL, iterations);
 
-  run.progressText = "Testing Node.js JSON processing...";
-  run.progress = 60;
-  run.results.nodejs = await runJsonTest("Node.js", NODEJS_URL, iterations);
+  const [bunResult, nodeResult] = await Promise.all([
+    runJsonTest("Bun", BUN_URL, iterations),
+    runJsonTest("Node.js", NODEJS_URL, iterations)
+  ]);
+
+  run.results.bun = bunResult;
+  run.results.nodejs = nodeResult;
+  run.progress = 80;
 }
 
 async function runFullSuite(run, concurrency, iterations, maxConcurrency, suiteDurationMinutes) {
@@ -672,14 +700,14 @@ async function runFullSuite(run, concurrency, iterations, maxConcurrency, suiteD
   const totalSeconds = suiteDurationMinutes * 60;
 
   // Reserve time for quick tests and concurrent sessions
-  // CPU + Fibonacci: ~30s total (quick tests)
+  // CPU + Fibonacci + JSON: ~30s total (quick tests, run in parallel)
   // Concurrent sessions: ~2 minutes (120s) for moderate concurrency
   const quickTestsTime = 30;
   const concurrentSessionsTime = 120;
 
   // Duration-based tests: throughput-todos, throughput-health, network-egress, network-inbound
-  // Each runs on both runtimes = 8 total runs
-  const durationBasedRuns = 8;
+  // Now running in parallel (Bun + Node simultaneously), so only 4 test phases instead of 8
+  const durationBasedRuns = 4;
   const remainingTime = totalSeconds - quickTestsTime - concurrentSessionsTime;
   const perTestDuration = Math.max(30, Math.floor(remainingTime / durationBasedRuns));
   const testDuration = `${perTestDuration}s`;
@@ -687,83 +715,108 @@ async function runFullSuite(run, concurrency, iterations, maxConcurrency, suiteD
   // Concurrent sessions target - scale with available time
   const concurrentTarget = Math.min(maxConcurrency, suiteDurationMinutes >= 20 ? 2000 : suiteDurationMinutes >= 10 ? 1000 : 500);
 
-  console.log(`[Full Suite] Total: ${suiteDurationMinutes}min, Per-test: ${perTestDuration}s, Concurrent target: ${concurrentTarget}`);
+  console.log(`[Full Suite] Total: ${suiteDurationMinutes}min, Per-test: ${perTestDuration}s, Concurrent target: ${concurrentTarget} (PARALLEL MODE)`);
 
   run.results = {
     bun: { throughput: {}, cpu: null, fibonacci: null, networkEgress: null, networkInbound: null, concurrent: null, json: null },
     nodejs: { throughput: {}, cpu: null, fibonacci: null, networkEgress: null, networkInbound: null, concurrent: null, json: null }
   };
 
-  // 1. Throughput tests (20%)
-  run.progressText = "Testing Bun /api/todos throughput...";
+  // 1. Throughput tests - /api/todos (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js /api/todos throughput in parallel...";
   run.progress = 5;
-  run.results.bun.throughput.todos = await runThroughputTest("Bun", BUN_URL, "/api/todos", testDuration, concurrency);
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runThroughputTest("Bun", BUN_URL, "/api/todos", testDuration, concurrency),
+      runThroughputTest("Node.js", NODEJS_URL, "/api/todos", testDuration, concurrency)
+    ]);
+    run.results.bun.throughput.todos = bunResult;
+    run.results.nodejs.throughput.todos = nodeResult;
+  }
 
-  run.progressText = "Testing Node.js /api/todos throughput...";
-  run.progress = 10;
-  run.results.nodejs.throughput.todos = await runThroughputTest("Node.js", NODEJS_URL, "/api/todos", testDuration, concurrency);
+  // 2. Throughput tests - /api/health (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js /api/health throughput in parallel...";
+  run.progress = 18;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runThroughputTest("Bun", BUN_URL, "/api/health", testDuration, concurrency),
+      runThroughputTest("Node.js", NODEJS_URL, "/api/health", testDuration, concurrency)
+    ]);
+    run.results.bun.throughput.health = bunResult;
+    run.results.nodejs.throughput.health = nodeResult;
+  }
 
-  run.progressText = "Testing Bun /api/health throughput...";
-  run.progress = 15;
-  run.results.bun.throughput.health = await runThroughputTest("Bun", BUN_URL, "/api/health", testDuration, concurrency);
+  // 3. Network Egress tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js network egress in parallel...";
+  run.progress = 31;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runNetworkEgressTest("Bun", BUN_URL, testDuration, concurrency),
+      runNetworkEgressTest("Node.js", NODEJS_URL, testDuration, concurrency)
+    ]);
+    run.results.bun.networkEgress = bunResult;
+    run.results.nodejs.networkEgress = nodeResult;
+  }
 
-  run.progressText = "Testing Node.js /api/health throughput...";
-  run.progress = 20;
-  run.results.nodejs.throughput.health = await runThroughputTest("Node.js", NODEJS_URL, "/api/health", testDuration, concurrency);
+  // 4. Network Inbound tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js network inbound in parallel...";
+  run.progress = 44;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runNetworkInboundTest("Bun", BUN_URL, testDuration, concurrency),
+      runNetworkInboundTest("Node.js", NODEJS_URL, testDuration, concurrency)
+    ]);
+    run.results.bun.networkInbound = bunResult;
+    run.results.nodejs.networkInbound = nodeResult;
+  }
 
-  // 2. Network Egress tests (35%)
-  run.progressText = "Testing Bun network egress (download)...";
-  run.progress = 25;
-  run.results.bun.networkEgress = await runNetworkEgressTest("Bun", BUN_URL, testDuration, concurrency);
+  // 5. CPU tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js CPU performance in parallel...";
+  run.progress = 57;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runCpuTest("Bun", BUN_URL, iterations),
+      runCpuTest("Node.js", NODEJS_URL, iterations)
+    ]);
+    run.results.bun.cpu = bunResult;
+    run.results.nodejs.cpu = nodeResult;
+  }
 
-  run.progressText = "Testing Node.js network egress (download)...";
-  run.progress = 35;
-  run.results.nodejs.networkEgress = await runNetworkEgressTest("Node.js", NODEJS_URL, testDuration, concurrency);
-
-  // 3. Network Inbound tests (50%)
-  run.progressText = "Testing Bun network inbound (upload)...";
-  run.progress = 42;
-  run.results.bun.networkInbound = await runNetworkInboundTest("Bun", BUN_URL, testDuration, concurrency);
-
-  run.progressText = "Testing Node.js network inbound (upload)...";
-  run.progress = 50;
-  run.results.nodejs.networkInbound = await runNetworkInboundTest("Node.js", NODEJS_URL, testDuration, concurrency);
-
-  // 4. CPU tests (60%)
-  run.progressText = "Testing Bun CPU performance...";
-  run.progress = 55;
-  run.results.bun.cpu = await runCpuTest("Bun", BUN_URL, iterations);
-
-  run.progressText = "Testing Node.js CPU performance...";
-  run.progress = 60;
-  run.results.nodejs.cpu = await runCpuTest("Node.js", NODEJS_URL, iterations);
-
-  // 5. Fibonacci tests (70%)
-  run.progressText = "Testing Bun Fibonacci...";
+  // 6. Fibonacci tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js Fibonacci in parallel...";
   run.progress = 65;
-  run.results.bun.fibonacci = await runFibonacciTest("Bun", BUN_URL, 40, 5);
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runFibonacciTest("Bun", BUN_URL, 40, 5),
+      runFibonacciTest("Node.js", NODEJS_URL, 40, 5)
+    ]);
+    run.results.bun.fibonacci = bunResult;
+    run.results.nodejs.fibonacci = nodeResult;
+  }
 
-  run.progressText = "Testing Node.js Fibonacci...";
-  run.progress = 70;
-  run.results.nodejs.fibonacci = await runFibonacciTest("Node.js", NODEJS_URL, 40, 5);
+  // 7. Concurrent Sessions tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js concurrent sessions in parallel...";
+  run.progress = 73;
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runConcurrentSessionsTest("Bun", BUN_URL, "10s", concurrentTarget),
+      runConcurrentSessionsTest("Node.js", NODEJS_URL, "10s", concurrentTarget)
+    ]);
+    run.results.bun.concurrent = bunResult;
+    run.results.nodejs.concurrent = nodeResult;
+  }
 
-  // 6. Concurrent Sessions tests (85%)
-  run.progressText = "Testing Bun concurrent sessions...";
-  run.progress = 72;
-  run.results.bun.concurrent = await runConcurrentSessionsTest("Bun", BUN_URL, "10s", concurrentTarget);
-
-  run.progressText = "Testing Node.js concurrent sessions...";
-  run.progress = 80;
-  run.results.nodejs.concurrent = await runConcurrentSessionsTest("Node.js", NODEJS_URL, "10s", concurrentTarget);
-
-  // 7. JSON Processing tests (92%)
-  run.progressText = "Testing Bun JSON processing...";
+  // 8. JSON Processing tests (Bun & Node in parallel)
+  run.progressText = "Testing Bun & Node.js JSON processing in parallel...";
   run.progress = 88;
-  run.results.bun.json = await runJsonTest("Bun", BUN_URL, 50);
-
-  run.progressText = "Testing Node.js JSON processing...";
-  run.progress = 92;
-  run.results.nodejs.json = await runJsonTest("Node.js", NODEJS_URL, 50);
+  {
+    const [bunResult, nodeResult] = await Promise.all([
+      runJsonTest("Bun", BUN_URL, 50),
+      runJsonTest("Node.js", NODEJS_URL, 50)
+    ]);
+    run.results.bun.json = bunResult;
+    run.results.nodejs.json = nodeResult;
+  }
 }
 
 function calculateSummary(results, testType) {
