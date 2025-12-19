@@ -41,6 +41,37 @@ const NODEJS_URL = process.env.NODEJS_URL || `http://${process.env.NODEJS_HOST |
 
 console.log(`[Storage] Using results directory: ${RESULTS_DIR}`);
 
+// Generate concurrency levels for testing based on max target
+function generateConcurrencyLevels(maxConcurrency) {
+  const levels = [];
+
+  if (maxConcurrency <= 500) {
+    // Low range: 50, 100, 200, 300, 400, 500
+    for (let i = 50; i <= maxConcurrency; i += 50) {
+      if (i <= 100 || i % 100 === 0) levels.push(i);
+    }
+  } else if (maxConcurrency <= 2000) {
+    // Medium range: 100, 250, 500, 750, 1000, 1250, 1500, 1750, 2000
+    levels.push(100, 250, 500);
+    for (let i = 750; i <= maxConcurrency; i += 250) {
+      levels.push(i);
+    }
+  } else {
+    // High range: 100, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000
+    levels.push(100, 500, 1000);
+    for (let i = 1500; i <= maxConcurrency; i += 500) {
+      levels.push(i);
+    }
+  }
+
+  // Ensure max is included
+  if (levels[levels.length - 1] !== maxConcurrency) {
+    levels.push(maxConcurrency);
+  }
+
+  return levels.filter(l => l <= maxConcurrency);
+}
+
 // Store active runs
 const activeRuns = new Map();
 
@@ -330,12 +361,15 @@ async function runNetworkInboundTest(name, url, duration, concurrency) {
 }
 
 // Run Concurrent Sessions test
-async function runConcurrentSessionsTest(name, url, duration, maxConcurrency = 500) {
+async function runConcurrentSessionsTest(name, url, duration, maxConcurrency = 2000) {
   const endpoint = `/api/network/hold/1000`; // Hold each connection for 1 second
   const fullUrl = `${url}${endpoint}`;
 
-  // Test increasing concurrency levels to find the maximum
-  const concurrencyLevels = [50, 100, 200, 300, 400, 500];
+  // Generate concurrency levels dynamically based on maxConcurrency
+  // For 2000: [100, 250, 500, 750, 1000, 1500, 2000]
+  // For 5000: [100, 500, 1000, 1500, 2000, 3000, 4000, 5000]
+  const concurrencyLevels = generateConcurrencyLevels(maxConcurrency);
+  console.log(`[Concurrent] Testing levels: ${concurrencyLevels.join(', ')} (max: ${maxConcurrency})`);
   const results = [];
 
   for (const concurrency of concurrencyLevels) {
@@ -380,6 +414,14 @@ async function runConcurrentSessionsTest(name, url, duration, maxConcurrency = 5
     ? Math.max(...successfulLevels.map(r => r.concurrency))
     : 0;
 
+  // Generate recommendation based on results
+  const targetReached = maxSustainedConcurrency >= maxConcurrency;
+  const recommendation = targetReached
+    ? `Server handles ${maxConcurrency}+ concurrent connections well`
+    : maxSustainedConcurrency >= 1000
+      ? `Server sustains ${maxSustainedConcurrency} concurrent connections (target: ${maxConcurrency})`
+      : `Server may struggle above ${maxSustainedConcurrency} concurrent connections`;
+
   return {
     test: name,
     endpoint,
@@ -387,9 +429,8 @@ async function runConcurrentSessionsTest(name, url, duration, maxConcurrency = 5
     duration: "10s per level",
     tested_levels: results,
     max_sustained_concurrency: maxSustainedConcurrency,
-    recommendation: maxSustainedConcurrency >= 500
-      ? "Server handles 500+ concurrent connections well"
-      : `Server may struggle above ${maxSustainedConcurrency} concurrent connections`
+    target_concurrency: maxConcurrency,
+    recommendation
   };
 }
 
@@ -417,13 +458,13 @@ export async function checkServicesHealth() {
 // Start a benchmark run
 export async function startBenchmark(testType, config) {
   const runId = generateRunId();
-  const { duration = "30s", concurrency = 50, iterations = 10 } = config;
+  const { duration = "30s", concurrency = 50, iterations = 10, maxConcurrency = 2000 } = config;
 
   // Initialize run state
   const run = {
     id: runId,
     testType,
-    config: { duration, concurrency, iterations },
+    config: { duration, concurrency, iterations, maxConcurrency },
     status: "running",
     progress: 0,
     progressText: "Initializing...",
@@ -435,13 +476,13 @@ export async function startBenchmark(testType, config) {
   activeRuns.set(runId, run);
 
   // Run benchmark asynchronously
-  runBenchmarkAsync(runId, testType, duration, concurrency, iterations);
+  runBenchmarkAsync(runId, testType, duration, concurrency, iterations, maxConcurrency);
 
   return runId;
 }
 
 // Async benchmark execution
-async function runBenchmarkAsync(runId, testType, duration, concurrency, iterations) {
+async function runBenchmarkAsync(runId, testType, duration, concurrency, iterations, maxConcurrency = 2000) {
   const run = activeRuns.get(runId);
   if (!run) return;
 
@@ -477,7 +518,7 @@ async function runBenchmarkAsync(runId, testType, duration, concurrency, iterati
     } else if (testConfig.type === "network-inbound") {
       await runSingleNetworkInboundTest(run, duration, concurrency);
     } else if (testConfig.type === "concurrent-sessions") {
-      await runSingleConcurrentSessionsTest(run, concurrency);
+      await runSingleConcurrentSessionsTest(run, maxConcurrency);
     }
 
     // Calculate summary

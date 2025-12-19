@@ -959,6 +959,17 @@
             </div>
           </div>
 
+          <div class="form-group" id="max-concurrency-group" style="display: none;">
+            <label for="max-concurrency">Max Concurrent Connections</label>
+            <div class="slider-container">
+              <input type="range" id="max-concurrency" name="maxConcurrency" min="100" max="5000" step="100" value="2000">
+              <span class="slider-value" id="max-concurrency-value">2000</span>
+            </div>
+            <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 0.5rem; display: block;">
+              Tests connection levels up to this target. Recommended: 2000 for 1vCPU/2GB instances.
+            </small>
+          </div>
+
           <button type="submit" class="btn btn-primary" id="run-btn">
             <span id="run-btn-text">Run Benchmark</span>
             <div class="spinner" id="run-spinner" style="display: none;"></div>
@@ -1086,6 +1097,7 @@
     const duration = document.getElementById('duration');
     const concurrency = document.getElementById('concurrency');
     const iterations = document.getElementById('iterations');
+    const maxConcurrency = document.getElementById('max-concurrency');
     const runBtn = document.getElementById('run-btn');
     const runBtnText = document.getElementById('run-btn-text');
     const runSpinner = document.getElementById('run-spinner');
@@ -1143,6 +1155,10 @@
       iterations.addEventListener('input', () => {
         document.getElementById('iterations-value').textContent = iterations.value;
       });
+
+      maxConcurrency.addEventListener('input', () => {
+        document.getElementById('max-concurrency-value').textContent = maxConcurrency.value;
+      });
     }
 
     // Toggle form fields based on test type
@@ -1152,15 +1168,23 @@
         const durationGroup = document.getElementById('duration-group');
         const concurrencyGroup = document.getElementById('concurrency-group');
         const iterationsGroup = document.getElementById('iterations-group');
+        const maxConcurrencyGroup = document.getElementById('max-concurrency-group');
 
         if (type === 'cpu-heavy' || type === 'fibonacci') {
           durationGroup.style.display = 'none';
           concurrencyGroup.style.display = 'none';
           iterationsGroup.style.display = 'block';
+          maxConcurrencyGroup.style.display = 'none';
+        } else if (type === 'concurrent-sessions') {
+          durationGroup.style.display = 'none';
+          concurrencyGroup.style.display = 'none';
+          iterationsGroup.style.display = 'none';
+          maxConcurrencyGroup.style.display = 'block';
         } else {
           durationGroup.style.display = 'block';
           concurrencyGroup.style.display = 'block';
           iterationsGroup.style.display = 'none';
+          maxConcurrencyGroup.style.display = 'none';
         }
       });
     }
@@ -1174,7 +1198,8 @@
         testType: type,
         duration: `${duration.value}s`,
         concurrency: parseInt(concurrency.value),
-        iterations: parseInt(iterations.value)
+        iterations: parseInt(iterations.value),
+        maxConcurrency: parseInt(maxConcurrency.value)
       };
 
       await startBenchmark(config);
@@ -1697,10 +1722,15 @@
         `;
       } else if (testType === 'concurrent-sessions') {
         // Concurrent sessions details
+        const targetConcurrency = config.maxConcurrency || 2000;
         bunRows = `
           <div class="report-details-row">
-            <span class="report-details-label">Max Concurrent</span>
+            <span class="report-details-label">Max Sustained</span>
             <span class="report-details-value">${details.bun?.maxConcurrency || '-'}</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Target</span>
+            <span class="report-details-value">${targetConcurrency}</span>
           </div>
           <div class="report-details-row">
             <span class="report-details-label">Levels Tested</span>
@@ -1709,8 +1739,12 @@
         `;
         nodeRows = `
           <div class="report-details-row">
-            <span class="report-details-label">Max Concurrent</span>
+            <span class="report-details-label">Max Sustained</span>
             <span class="report-details-value">${details.nodejs?.maxConcurrency || '-'}</span>
+          </div>
+          <div class="report-details-row">
+            <span class="report-details-label">Target</span>
+            <span class="report-details-value">${targetConcurrency}</span>
           </div>
           <div class="report-details-row">
             <span class="report-details-label">Levels Tested</span>
@@ -1751,12 +1785,13 @@
 
       // Build config section
       let configHtml = '';
-      if (config.duration || config.concurrency || config.iterations) {
+      if (config.duration || config.concurrency || config.iterations || config.maxConcurrency) {
         configHtml = `
           <div class="report-config">
             ${config.duration ? `<span class="report-config-item">Duration: <span>${config.duration}</span></span>` : ''}
             ${config.concurrency ? `<span class="report-config-item">Concurrency: <span>${config.concurrency}</span></span>` : ''}
             ${config.iterations ? `<span class="report-config-item">Iterations: <span>${config.iterations}</span></span>` : ''}
+            ${config.maxConcurrency ? `<span class="report-config-item">Max Connections: <span>${config.maxConcurrency}</span></span>` : ''}
           </div>
         `;
       }
