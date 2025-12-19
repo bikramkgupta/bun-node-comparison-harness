@@ -79,9 +79,36 @@ PATCH /api/todos/:id       # Toggle completion
 DELETE /api/todos/:id      # Delete todo
 
 # Benchmark-specific endpoints
-GET /api/cpu-heavy         # Generate/sort 100k numbers
-GET /api/fibonacci/:n      # Recursive Fibonacci (max n=45)
+GET /api/cpu-heavy              # Generate/sort 100k numbers
+GET /api/fibonacci/:n           # Recursive Fibonacci (max n=45)
+GET /api/json-benchmark/:size   # JSON parse/serialize (small, medium, large)
+GET /api/network/download/:kb   # Download payload for egress test (max 10MB)
+POST /api/network/upload        # Upload payload for inbound test (max 50MB)
+GET /api/network/hold/:ms       # Hold connection for concurrent session test
 ```
+
+## Benchmark Test Types
+
+The dashboard supports 9 benchmark types:
+
+| Test Type | Description | Metric |
+|-----------|-------------|--------|
+| `throughput-todos` | HTTP throughput on /api/todos | Requests/sec |
+| `throughput-health` | HTTP throughput on /api/health | Requests/sec |
+| `cpu-heavy` | Generate and sort 100k numbers | ms per operation |
+| `fibonacci` | Recursive Fibonacci(40) calculation | ms per operation |
+| `json-processing` | JSON stringify/parse of nested objects | ms per operation |
+| `network-egress` | Server → Client download throughput | Mbps |
+| `network-inbound` | Client → Server upload throughput | Mbps |
+| `concurrent-sessions` | Max sustained concurrent connections | Connection count |
+| `full-suite` | Run all tests sequentially | Combined metrics |
+
+### Parallel Execution
+
+All tests run **Bun and Node.js in parallel** for:
+- Fairer comparison (identical system conditions)
+- ~50% faster total benchmark time
+- More realistic load testing (both servers stressed simultaneously)
 
 ## Benchmark Configuration
 
