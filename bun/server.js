@@ -265,24 +265,11 @@ app.get('/api/fibonacci/:n', (req, res) => {
 // Network Throughput Benchmark Endpoints
 // ============================================
 
-// Pre-generate payload buffers for network tests (avoids CPU overhead during test)
-const PAYLOAD_1KB = Buffer.alloc(1024, 'X');
-const PAYLOAD_CACHE = new Map();
-
-function getPayload(sizeKB) {
-  if (!PAYLOAD_CACHE.has(sizeKB)) {
-    const size = Math.min(sizeKB, 10240); // Cap at 10MB
-    PAYLOAD_CACHE.set(sizeKB, Buffer.alloc(size * 1024, 'X'));
-  }
-  return PAYLOAD_CACHE.get(sizeKB);
-}
-
 // Download endpoint - Test EGRESS throughput
 // Returns a payload of specified size in KB (default 100KB, max 10MB)
 app.get('/api/network/download/:sizeKB?', (req, res) => {
   const sizeKB = Math.min(parseInt(req.params.sizeKB) || 100, 10240);
-  const startTime = Date.now();
-  const payload = getPayload(sizeKB);
+  const payload = Buffer.alloc(sizeKB * 1024, 'X');
 
   res.set({
     'Content-Type': 'application/octet-stream',
