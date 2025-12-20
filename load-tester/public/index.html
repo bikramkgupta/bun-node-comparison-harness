@@ -924,10 +924,11 @@
           <div class="form-group">
             <label for="test-type">Test Type</label>
             <select id="test-type" name="testType">
+              <option value="cpu-heavy" selected>CPU Heavy (100k Sort)</option>
               <option value="throughput-todos">HTTP Throughput (/api/todos)</option>
               <option value="throughput-health">HTTP Throughput (/api/health)</option>
-              <option value="cpu-heavy">CPU Heavy (100k Sort)</option>
               <option value="fibonacci">Fibonacci (n=40)</option>
+              <option value="json-processing">JSON Parse/Serialize</option>
               <option value="network-egress">Network Egress (Mbps)</option>
               <option value="network-inbound">Network Inbound (Mbps)</option>
               <option value="concurrent-sessions">Max Concurrent Sessions</option>
@@ -935,7 +936,7 @@
             </select>
           </div>
 
-          <div class="form-group" id="duration-group">
+          <div class="form-group" id="duration-group" style="display: none;">
             <label for="duration">Duration (per test)</label>
             <div class="slider-container">
               <input type="range" id="duration" name="duration" min="10" max="300" value="30">
@@ -954,7 +955,7 @@
             </small>
           </div>
 
-          <div class="form-group" id="concurrency-group">
+          <div class="form-group" id="concurrency-group" style="display: none;">
             <label for="concurrency">Concurrency</label>
             <div class="slider-container">
               <input type="range" id="concurrency" name="concurrency" min="10" max="200" value="50">
@@ -962,7 +963,7 @@
             </div>
           </div>
 
-          <div class="form-group" id="iterations-group" style="display: none;">
+          <div class="form-group" id="iterations-group">
             <label for="iterations">Iterations</label>
             <div class="slider-container">
               <input type="range" id="iterations" name="iterations" min="5" max="50" value="10">
@@ -1187,7 +1188,7 @@
         const iterationsGroup = document.getElementById('iterations-group');
         const maxConcurrencyGroup = document.getElementById('max-concurrency-group');
 
-        if (type === 'cpu-heavy' || type === 'fibonacci') {
+        if (type === 'cpu-heavy' || type === 'fibonacci' || type === 'json-processing') {
           durationGroup.style.display = 'none';
           suiteDurationGroup.style.display = 'none';
           concurrencyGroup.style.display = 'none';
